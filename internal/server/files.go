@@ -201,8 +201,17 @@ func (s *Server) saveUpload(r io.Reader, ext string) (path, sum string, size int
 
 var tmplVar = regexp.MustCompile(`\{([a-z_]+)\}`)
 
-// renderPath fills a storage path template for a document.
+// renderPath fills a storage path template for a document. A template whose
+// last part has no placeholder ("abjelosevic", "Car/Insurance") names a folder,
+// as Paperless storage paths without placeholders are used: the title becomes
+// the file name inside it instead of every document sharing one name.
 func renderPath(tmpl string, d *store.Document, names store.NameMaps) string {
+	if t := strings.TrimRight(strings.TrimSpace(filepath.ToSlash(tmpl)), "/"); t != "" {
+		last := t[strings.LastIndex(t, "/")+1:]
+		if !tmplVar.MatchString(last) {
+			tmpl = t + "/{title}"
+		}
+	}
 	created, _ := time.Parse("2006-01-02", d.Created)
 	tags := []string{}
 	for _, t := range d.Tags {

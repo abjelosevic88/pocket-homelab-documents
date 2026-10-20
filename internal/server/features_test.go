@@ -254,3 +254,17 @@ func TestTitleFromNameAndExternalID(t *testing.T) {
 		t.Errorf("same external id: %d %v", code, dup)
 	}
 }
+
+func TestRenderPathFolderTemplates(t *testing.T) {
+	d := &store.Document{ID: 4, Title: "Pasos Hrvatski", Created: "2026-07-29", OriginalExt: "pdf"}
+	for _, c := range []struct{ tmpl, want string }{
+		{"abjelosevic", "abjelosevic/Pasos Hrvatski"},
+		{"Car/Insurance/", "Car/Insurance/Pasos Hrvatski"},
+		{"{created_year}/{title}", "2026/Pasos Hrvatski"},
+		{"Ana/{created} {title}", "Ana/2026-07-29 Pasos Hrvatski"},
+	} {
+		if got := filepath.ToSlash(renderPath(c.tmpl, d, store.NameMaps{})); got != c.want {
+			t.Errorf("%q: %q want %q", c.tmpl, got, c.want)
+		}
+	}
+}
