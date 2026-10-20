@@ -6,26 +6,26 @@ import { docsURL } from '../lib/format'
 import { Avatar } from './people'
 import { ErrorBoundary } from './ErrorBoundary'
 import { UploadOverlay } from './UploadOverlay'
+import { QuickSearch, type QuickSearchHandle } from './QuickSearch'
 
 const section = (path: string) => path.split('/')[1] || 'dashboard'
 
 export default function Layout() {
   const { user, settings, status, theme, toggleTheme, setUser, tax, queue, users } = useApp()
   const [open, setOpen] = useState(false)
-  const [q, setQ] = useState('')
   const [drop, setDrop] = useState(false)
   const dragDepth = useRef(0)
   const [dropped, setDropped] = useState<File[] | null>(null)
   const navigate = useNavigate()
   const loc = useLocation()
   const title = settings?.title || 'Pocket Documents'
-  const search = useRef<HTMLInputElement>(null)
+  const search = useRef<QuickSearchHandle>(null)
   useEffect(() => { setOpen(false) }, [loc.pathname, loc.search])
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable
-      if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); search.current?.focus(); search.current?.select() }
+      if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); search.current?.focus() }
       else if (!typing && !mod && e.key === '/') { e.preventDefault(); search.current?.focus() }
       else if (!typing && !mod && e.key === 'u') { e.preventDefault(); navigate('/upload') }
       else if (!typing && !mod && e.key === 'g') { (window as unknown as { _pdG?: number })._pdG = Date.now() }
@@ -52,7 +52,6 @@ export default function Layout() {
     return () => { window.removeEventListener('dragenter', enter); window.removeEventListener('dragleave', leave); window.removeEventListener('dragover', over); window.removeEventListener('drop', dropH) }
   }, [])
   const logout = async () => { await api.post(`${V1}/auth/logout`); setUser(null); navigate('/login') }
-  const submit = (e: React.FormEvent) => { e.preventDefault(); navigate(docsURL({ q })); search.current?.blur() }
   const inbox = tax.tags.filter(t => t.is_inbox)
   const views = tax.saved_views.filter(v => v.in_sidebar)
   const busy = queue.queued + queue.running
@@ -92,11 +91,7 @@ export default function Layout() {
       <div className="main">
         <header className="topbar">
           <button className="btn ghost icon menu-btn" onClick={() => setOpen(o => !o)} aria-label="Menu">☰</button>
-          <form className="topsearch" onSubmit={submit}>
-            <span className="ico">⌕</span>
-            <input ref={search} value={q} onChange={e => setQ(e.target.value)} placeholder="Search documents…  tag:x  from:x  type:x  created:2024  is:inbox" aria-label="Search" />
-            <span className="kbd hide-sm">⌘K</span>
-          </form>
+          <QuickSearch ref={search} />
           <NavLink to="/upload" className="btn ghost icon hide-lg" aria-label="Upload">⇡</NavLink>
         </header>
         <main className="content"><ErrorBoundary key={section(loc.pathname)} where={loc.pathname}><Outlet /></ErrorBoundary></main>
