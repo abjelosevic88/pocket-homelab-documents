@@ -28,6 +28,66 @@ Paperless-ngx is the right idea: scan everything, OCR it, tag it, find it again.
 - **Moving in.** Import from a running Paperless-ngx over its API (documents, tags, correspondents, types, paths, custom fields, notes) or from a `document_exporter` zip. Export everything of yours as one zip that imports anywhere.
 - **Strictly per person.** Accounts own their documents, labels, fields, rules and views; admins manage users and OCR settings and see nothing else. With **Pocket Core** on the box: single sign-on, `documents.*` events on the bus, paired-phone tokens, and *Book in Pocket Money* for invoices and receipts.
 
+<p align="center"><img src="docs/screenshots/home.png" width="900" alt="The dashboard: inbox, recently added scans and PDFs, documents per month, types and correspondents"></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/documents.png" alt="Search with highlighted passages, facet counts on every filter, a table with custom-field columns"></td>
+    <td width="50%"><img src="docs/screenshots/serbian.png" alt="A Cyrillic query finds Latin documents too: Бања Лука matches Banja Luka"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Search: full text with highlighted passages and facet counts on every filter.</sub></td>
+    <td align="center"><sub>Serbian in both alphabets: <code>Бања Лука</code> finds <i>Banja Luka</i> and the other way round.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/suggestions.png" alt="A photographed Cyrillic tax decision, OCR'd, with suggested correspondent, type, tag and dates"></td>
+    <td width="50%"><img src="docs/screenshots/document.png" alt="A filed insurance policy: tags, correspondent, type, storage path, amount and expiry fields"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A phone photo of a Cyrillic letter, OCR'd; suggestions to file it in one tap.</sub></td>
+    <td align="center"><sub>A filed document: labels, custom fields, notes, history, versions.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/pages.png" alt="Page tools: select pages to rotate, split off into a new document or delete"></td>
+    <td width="50%"><img src="docs/screenshots/cards.png" alt="Documents as cards with thumbnails"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Page tools: rotate, split off, delete; the old file stays as a version.</sub></td>
+    <td align="center"><sub>Cards, table or list.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/rules.png" alt="Rules on arrival, on change and on a date, with a message"></td>
+    <td width="50%"><img src="docs/screenshots/mail.png" alt="Mail accounts and rules"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Rules when a document comes in, changes, or a date comes near.</sub></td>
+    <td align="center"><sub>Mail: IMAP accounts and rules turn attachments into documents.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/ocr.png" alt="OCR settings and language packs, Serbian Cyrillic and Latin installed"></td>
+    <td width="50%"><img src="docs/screenshots/folder.png" alt="The documents folder: Nextcloud, WebDAV or a server folder, with an Inbox"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>OCR languages; more packs install from here without a rebuild.</sub></td>
+    <td align="center"><sub>Your documents folder in Nextcloud, WebDAV or on the server, with an Inbox.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/upload.png" alt="Upload with labels for the batch, camera capture and other ways in"></td>
+    <td width="50%"><img src="docs/screenshots/jobs.png" alt="Processing: every OCR job with its log, retry and cancel"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Upload: drop anywhere, label the batch, or take a photo.</sub></td>
+    <td align="center"><sub>Processing: each OCR job with its full log.</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshots/mobile-list.png" width="260" alt="Documents on a phone">&nbsp;&nbsp;
+  <img src="docs/screenshots/mobile-document.png" width="260" alt="A document on a phone">&nbsp;&nbsp;
+  <img src="docs/screenshots/dark.png" width="420" alt="A Cyrillic medical report in dark mode"><br>
+  <sub>An installable PWA (share a photo to it from the phone), plus dark mode. Every name and number in these screenshots is made up.</sub>
+</p>
+
 ## Run it
 
 ```bash
