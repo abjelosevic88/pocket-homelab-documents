@@ -22,6 +22,23 @@ Everything the web app does goes through `/api/v1`. Authenticate with the sessio
 | `POST /documents/bulk {ids[], op, …}` | `op`: `add_tag` (`tag` or `add_tags[]`), `remove_tag`, `modify_tags {add_tags, remove_tags}`, `set_correspondent`, `set_document_type`, `set_storage_path`, `set_favorite`, `set_fields {custom_fields, remove_fields}`, `remove_inbox`, `delete`, `restore`, `purge`, `reprocess {mode}` |
 | `GET /documents/next_asn` | |
 
+## Pages, versions, sharing
+
+| | |
+| --- | --- |
+| `POST /documents/{id}/pages {op: rotate\|delete\|split, pages[], degrees, title, remove}` | rotate (PDF or image; pages empty = all), remove pages, or split pages off into a new document (201 with it). The previous file is kept as a version and OCR runs again. |
+| `POST /documents/merge {ids[], title, delete_originals}` | a new document from several PDFs |
+| `POST /documents/{id}/replace` (multipart `document`) | a new file for the same document |
+| `GET /documents/{id}/versions` · `GET …/versions/{n}/download` · `POST …/versions/{n}/restore` | earlier files |
+| `GET/POST /documents/{id}/shared_with {user_id, level: view\|edit}` · `DELETE …/shared_with/{uid}` | share one document with another account on the box |
+| `GET /shared` · `GET /documents?shared=1` | what others shared with me (`access`, `owner_name`, `shared_tags` on each) |
+| `POST /documents/{id}/reprocess {mode, force_text, language}` | `language` (tesseract codes with +) is saved on the document |
+| `GET /ocr/languages` · `POST /ocr/languages {code}` · `DELETE /ocr/languages/{code}` | installed and installable Tesseract packs (admins install) |
+
+## Paperless-ngx compatible API
+
+Paperless clients (Paperless-Mobile, Swift Paperless, scripts) work against `/api/…` with `Authorization: Token <api token>` or `POST /api/token/ {username, password}`: documents (list with the usual filters, `post_document/`, `download/`, `preview/`, `thumb/`, `notes/`, `suggestions/`, `bulk_edit/`), tags, correspondents, document types, storage paths, custom fields, saved views, tasks, statistics, `ui_settings/`, search autocomplete. Everything is the token's person's.
+
 ## Labels
 
 `GET/POST /tags`, `PUT/DELETE /tags/{id}` with `{name, color, match, matching_algorithm, is_insensitive, is_inbox}`; the same for `/correspondents`, `/document_types`, `/storage_paths` (`+ path`) and `/custom_fields` (`{name, data_type, extra: {options[], currency}}`). `GET /taxonomy` returns all of them plus saved views in one answer.

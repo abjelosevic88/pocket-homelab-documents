@@ -124,6 +124,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if n := s.store.RequeueRunning(ctx); n > 0 {
 		s.log.Info("requeued jobs left running by the last run", "jobs", n)
 	}
+	if dir := ocr.PrepareTessdata(s.tessdataDir()); dir != "" {
+		s.log.Info("tesseract languages", "dir", dir)
+	}
 	tools := ocr.Detect(ctx, s.cfg.GotenbergURL)
 	s.log.Info("ocr tools", "ocrmypdf", tools.OCRmyPDF, "tesseract", tools.Tesseract, "poppler", tools.PDFToText, "gotenberg", tools.Gotenberg, "languages", strings.Join(tools.Languages, ","))
 	if !tools.CanOCR() {
@@ -132,6 +135,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	s.startWorkers(ctx)
 	go s.consumeLoop(ctx)
 	go s.inboxLoop(ctx)
+	go s.mailLoop(ctx)
 	go s.janitor(ctx)
 	if s.core.Configured() {
 		go s.coreLoop(ctx)
@@ -183,7 +187,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Description: "Scans and files made searchable: OCR into PDF/A, full-text search with filters, tags, correspondents, types, custom fields, rules and a classifier that learns how you file. A Paperless-ngx replacement.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "DOCUMENTS",
-		Publishes: []string{"documents.added", "documents.processed", "documents.updated", "documents.deleted", "documents.failed"},
+		Publishes: []string{"documents.added", "documents.processed", "documents.updated", "documents.deleted", "documents.failed", "documents.shared"},
 		Offers:    linkOffers,
 		Uses:      linkUses,
 		Services:  serviceUses,
@@ -267,6 +271,7 @@ func (s *Server) janitor(ctx context.Context) {
 		}
 		s.store.PruneJobs(ctx, 500)
 		_ = s.store.PurgeSessions(ctx)
+		s.runScheduled(ctx)
 		// page image caches of documents that no longer exist
 		if entries, err := os.ReadDir(s.cfg.PagesDir); err == nil {
 			for _, e := range entries {
@@ -363,6 +368,19 @@ func (s *Server) Router() http.Handler {
 			r.Post("/documents/{id}/shares", s.handleCreateShare)
 			r.Get("/documents/{id}/jobs", s.handleDocumentJobs)
 			r.Post("/documents/{id}/money", s.handleBookMoney)
+			r.Post("/documents/{id}/pages", s.handlePages)
+			r.Post("/documents/{id}/replace", s.handleReplaceFile)
+			r.Get("/documents/{id}/versions", s.handleListVersions)
+			r.Get("/documents/{id}/versions/{n}/download", s.handleDownloadVersion)
+			r.Post("/documents/{id}/versions/{n}/restore", s.handleRestoreVersion)
+			r.Get("/documents/{id}/shared_with", s.handleListDocShares)
+			r.Post("/documents/{id}/shared_with", s.handleShareWith)
+			r.Delete("/documents/{id}/shared_with/{uid}", s.handleUnshareWith)
+			r.Post("/documents/merge", s.handleMerge)
+			r.Get("/shared", s.handleSharedWithMe)
+			r.Get("/ocr/languages", s.handleListLanguages)
+			r.Post("/ocr/languages", s.handleInstallLanguage)
+			r.Delete("/ocr/languages/{code}", s.handleRemoveLanguage)
 
 			for _, t := range []struct {
 				path string
@@ -427,8 +445,11 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/tokens/{id}", s.handleDeleteToken)
 
 			r.Get("/backup", s.handleBackup)
+			s.mountMail(r)
 		})
 	})
+	// Paperless-ngx clients: the same documents through Paperless' own API shapes.
+	s.mountPaperlessAPI(r)
 
 	r.NotFound(s.handleSPA)
 	return r

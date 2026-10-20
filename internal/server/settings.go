@@ -27,7 +27,8 @@ func (s *Server) publicSettings(r *http.Request, st store.Settings) map[string]a
 		"consume_dir": s.cfg.ConsumeDir, "consume_subdirs_as_tags": st.ConsumeSubdirsAsTags, "folder_roots": s.cfg.FolderRoots,
 		"folder_kind": st.FolderKind,
 		"date_format": st.DateFormat, "default_view": st.DefaultView, "page_size": st.PageSize, "default_sort": st.DefaultSort,
-		"title_from_name": st.TitleFromName, "date_from_text": st.DateFromText, "suggest_on_open": st.SuggestOnOpen,
+		"title_from_name": st.TitleFromName, "date_from_text": st.DateFromText, "date_from_name": st.DateFromName, "suggest_on_open": st.SuggestOnOpen,
+		"barcodes_enabled": st.BarcodesEnabled, "barcode_asn_prefix": st.BarcodeASNPrefix, "barcode_separator": st.BarcodeSeparator, "barcode_keep_separator": st.BarcodeKeepSep, "barcode_max_pages": st.BarcodeMaxPages,
 		"money_mode": st.MoneyMode, "money_url": st.MoneyURL, "money_token_set": st.MoneyToken != "", "money_account": st.MoneyAccount,
 		"notify_url":       st.NotifyURL,
 		"core":             s.core.Configured(),
@@ -80,6 +81,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		st.OCRMaxPages = clampInt(st.OCRMaxPages, 0, 5000)
 		st.TrashDays = clampInt(st.TrashDays, 0, 3650)
+		st.BarcodeASNPrefix = strings.TrimSpace(st.BarcodeASNPrefix)
+		st.BarcodeSeparator = firstNonEmpty(strings.TrimSpace(st.BarcodeSeparator), "PATCHT")
+		st.BarcodeMaxPages = clampInt(st.BarcodeMaxPages, 1, 500)
 		st.SetupComplete = cur.SetupComplete
 		if err := s.store.SaveBoxSettings(ctx, st); err != nil {
 			s.fail(w, err, "save settings")

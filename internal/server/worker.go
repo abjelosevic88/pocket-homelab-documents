@@ -135,6 +135,10 @@ func (s *Server) processJob(ctx context.Context, j *store.Job) error {
 		MaxPages: box.OCRMaxPages, OutputType: box.OCROutputType, ImageDPI: s.cfg.OCRDPI, Threads: s.cfg.OCRThreads, Timeout: s.cfg.OCRTimeout,
 		Gotenberg: s.cfg.GotenbergURL, TmpDir: s.cfg.TmpDir, Log: func(l string) { logf("%s", l) },
 	}
+	if d.Language != "" {
+		opts.Language = d.Language
+		logf("languages for this document: %s", d.Language)
+	}
 	if missing := tools.HasLanguage(opts.Language); len(missing) > 0 {
 		logf("tesseract language(s) not installed: %s; using what is", strings.Join(missing, ", "))
 		var keep []string
@@ -156,6 +160,16 @@ func (s *Server) processJob(ctx context.Context, j *store.Job) error {
 	}
 	// previous page renders are stale
 	_ = os.RemoveAll(filepath.Join(s.cfg.PagesDir, strconv.FormatInt(d.ID, 10)))
+	// barcodes first: an ASN label, or separator sheets that make this several documents
+	if p.New {
+		if d.PageCount == 0 && tools.PDFInfo && strings.EqualFold(d.OriginalExt, "pdf") {
+			d.PageCount = ocr.PageCount(ctx, src)
+		}
+		if s.barcodes(ctx, d, tools, logf) {
+			_ = s.store.SetStatus(ctx, d.ID, "done", "split by separator sheets")
+			return nil
+		}
+	}
 	s.store.JobProgress(ctx, j.ID, "OCR running", "")
 	res, err := ocr.Process(ctx, tools, src, s.archivePath(d.ID), s.thumbPath(d.ID), opts)
 	if err != nil {
@@ -342,13 +356,7 @@ func (s *Server) runRules(ctx context.Context, d *store.Document, trigger, actor
 		if !r.Enabled || r.Trigger != trigger || !ruleFits(r, d, "") {
 			continue
 		}
-		c := s.ruleChanges(ctx, r, d)
-		if changed, err := s.store.UpdateDocument(ctx, d.UserID, d.ID, c); err == nil && len(changed) > 0 {
-			s.store.AddHistory(ctx, d.ID, d.UserID, "rule: "+r.Name, "rule", changed)
-			if nd, err := s.store.GetDocumentAny(ctx, d.ID, true); err == nil {
-				*d = *nd
-			}
-		}
+		s.applyRule(ctx, r, d, "rule: "+r.Name)
 	}
 }
 
@@ -369,13 +377,14 @@ func (s *Server) runRuleJob(ctx context.Context, j *store.Job) error {
 		if err != nil || !ruleFits(*r, d, "") {
 			continue
 		}
-		if changed, err := s.store.UpdateDocument(ctx, j.UserID, id, s.ruleChanges(ctx, *r, d)); err == nil && len(changed) > 0 {
-			s.store.AddHistory(ctx, id, j.UserID, "rule: "+r.Name, "rule", changed)
-			if nd, err := s.store.GetDocument(ctx, j.UserID, id, false); err == nil {
-				_ = s.placeInFolder(ctx, nd)
+		if r.Trigger == "scheduled" {
+			if s.store.RuleRan(ctx, r.ID, id) || !scheduleDue(*r, d, time.Now().Truncate(24*time.Hour)) {
+				continue
 			}
-			n++
+			s.store.MarkRuleRan(ctx, r.ID, id)
 		}
+		s.applyRule(ctx, *r, d, "rule: "+r.Name)
+		n++
 		if i%20 == 0 {
 			s.store.JobProgress(ctx, j.ID, fmt.Sprintf("%d of %d checked, %d changed", i+1, len(ids), n), "")
 		}

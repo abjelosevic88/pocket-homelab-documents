@@ -10,7 +10,7 @@ import { UploadOverlay } from './UploadOverlay'
 const section = (path: string) => path.split('/')[1] || 'dashboard'
 
 export default function Layout() {
-  const { user, settings, status, theme, toggleTheme, setUser, tax, queue } = useApp()
+  const { user, settings, status, theme, toggleTheme, setUser, tax, queue, users } = useApp()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [drop, setDrop] = useState(false)
@@ -68,6 +68,7 @@ export default function Layout() {
           <NavLink to="/documents" className={() => `nav-item ${loc.pathname === '/documents' && !loc.search ? 'active' : ''}`} end><span className="ico">▤</span>Documents</NavLink>
           {inbox.length > 0 && <NavLink to="/documents?inbox=1" className={() => `nav-item ${loc.search.includes('inbox=1') ? 'active' : ''}`}><span className="ico">⌾</span>Inbox{inbox.reduce((n, t) => n + t.document_count, 0) > 0 && <span className="count">{inbox.reduce((n, t) => n + t.document_count, 0)}</span>}</NavLink>}
           <NavLink to="/documents?favorite=1" className={() => `nav-item ${loc.search.includes('favorite=1') ? 'active' : ''}`}><span className="ico">★</span>Favourites</NavLink>
+          {users.length > 1 && <NavLink to="/documents?shared=1" className={() => `nav-item ${loc.search.includes('shared=1') ? 'active' : ''}`}><span className="ico">⇄</span>Shared with me</NavLink>}
         </nav>
         {views.length > 0 && <div className="side-scroll">
           <div className="side-head"><span>Views</span></div>

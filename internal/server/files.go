@@ -88,6 +88,7 @@ func (s *Server) purgeDocument(ctx context.Context, d *store.Document) error {
 		return err
 	}
 	s.removeFiles(d)
+	s.removeVersions(d.ID)
 	return nil
 }
 

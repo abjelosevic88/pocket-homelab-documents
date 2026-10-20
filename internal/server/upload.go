@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-documents/internal/extract"
+	"github.com/abjelosevic88/pocket-homelab-documents/internal/ocr"
 	"github.com/abjelosevic88/pocket-homelab-documents/internal/store"
 )
 
@@ -69,6 +72,9 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 		}
 	}
 	st, _ := s.store.GetSettings(ctx, uid)
+	if in.Created == "" && st.DateFromName {
+		in.Created = dateFromName(in.Name)
+	}
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
 		title = strings.TrimSuffix(in.Name, filepath.Ext(in.Name))
@@ -116,6 +122,23 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 	}
 	return d, nil
 }
+
+// dateFromName reads a date from a file name: 2026-03-14_invoice.pdf,
+// 20260314-scan.pdf, "Rechnung 14.03.2026.pdf".
+func dateFromName(name string) string {
+	base := strings.NewReplacer("_", " ", "-", "-").Replace(strings.TrimSuffix(name, filepath.Ext(name)))
+	if d := ocr.GuessCreated(base, true); d != "" {
+		return d
+	}
+	if m := compactDate.FindStringSubmatch(base); m != nil {
+		if t, err := time.Parse("20060102", m[1]); err == nil && t.Year() >= 1990 && t.Before(time.Now().AddDate(0, 0, 2)) {
+			return t.Format("2006-01-02")
+		}
+	}
+	return ""
+}
+
+var compactDate = regexp.MustCompile(`(?:^|[^0-9])((?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))(?:[^0-9]|$)`)
 
 func checksumOf(path string) (string, int64, error) {
 	f, err := os.Open(path)

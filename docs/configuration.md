@@ -37,6 +37,7 @@ Everything is an environment variable; every one has a default, so `docker run` 
 | `OCR_MAX_PAGES` | `0` | OCR only the first N pages (0 = all). |
 | `OCR_OUTPUT_TYPE` | `pdfa` | `pdfa` or `pdf`. |
 | `OCR_IMAGE_DPI` | `300` | Assumed for photos and images without a DPI. |
+| `DATA_DIR/tessdata` | – | Language packs installed from Settings → OCR → Languages land here (tessdata_best models); the image's own packs are linked in and `TESSDATA_PREFIX` points Tesseract at it. The image ships `srp` and `srp_latn` from tessdata_best. |
 | `GOTENBERG_URL` | – | With a [Gotenberg](https://gotenberg.dev) container, office documents, HTML, Markdown and text get a PDF twin too. Without it their text is still read natively. |
 | `CONSUME_POLL` | `10s` | How often the consume folder is looked at. A file is taken once its size is stable for two polls. |
 | `CONSUME_DELETE` | `true` | Remove the file from the consume folder once it is in (`false` copies it; the duplicate check keeps it from coming in twice). |
@@ -73,6 +74,14 @@ DATA_DIR/
   backups/                `pocket-documents backup` and Settings → Download database
   core.token              the Pocket Core app token (when registered)
 ```
+
+## Barcodes
+
+Settings → OCR → Barcodes (admins, needs zbar, in the image): on every new PDF or image the first pages are read for barcodes. A code `ASN00042` (the prefix is configurable) sets the archive serial number. A separator sheet, a page whose barcode reads `PATCHT` (configurable; any Code 128 / Code 39 / QR works), splits a batch scan into one document per section; the batch itself goes to the trash. Print separator sheets from any barcode generator.
+
+## Mail
+
+Settings → Mail: IMAP accounts and rules, like Paperless'. A rule says which folder to watch, what the mail must look like (sender, subject, attachment name), what to take (attachments, the mail as `.eml`, or both), what to assign, and what to do with the mail afterwards (mark read, flag, move, delete). Accounts are polled on their own interval; a message is consumed once per rule.
 
 ## The documents folder
 

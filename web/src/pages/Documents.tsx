@@ -19,7 +19,7 @@ function useListParams() {
   const params = {
     q: get('q'), tags: ints('tags'), tags_none: ints('tags__none'), correspondent: get('correspondent'), document_type: get('document_type'), storage_path: get('storage_path'),
     created: get('created'), added: get('added'), inbox: get('inbox') === '1', untagged: get('untagged') === '1', favorite: get('favorite') === '1', status: get('status'), mime: get('mime'),
-    sort: get('sort'), page: Number(get('page') || 1), view: get('view'), field: sp.getAll('field'), asn: get('asn'),
+    sort: get('sort'), page: Number(get('page') || 1), view: get('view'), field: sp.getAll('field'), asn: get('asn'), shared: get('shared') === '1',
   }
   const set = (patch: Record<string, unknown>) => {
     const next = new URLSearchParams(sp)
@@ -69,7 +69,7 @@ export default function Documents() {
   const total = data?.count || 0
   const pages = Math.max(1, Math.ceil(total / pageSize))
   const facets = data?.facets
-  const activeFilters = [params.tags.length, params.tags_none.length, params.correspondent, params.document_type, params.storage_path, params.created, params.added, params.inbox, params.untagged, params.favorite, params.status, params.mime, params.field.length, params.asn].filter(Boolean).length
+  const activeFilters = [params.tags.length, params.tags_none.length, params.correspondent, params.document_type, params.storage_path, params.created, params.added, params.inbox, params.untagged, params.favorite, params.status, params.mime, params.field.length, params.asn, params.shared].filter(Boolean).length
 
   const submit = (e: React.FormEvent) => { e.preventDefault(); set({ q }) }
   const toggleSel = (id: number, e: React.MouseEvent) => {
@@ -103,6 +103,7 @@ export default function Documents() {
         <FilterGroup title="Quick">
           <Chip on={params.inbox} onClick={() => set({ inbox: !params.inbox })}>⌾ Inbox</Chip>
           <Chip on={params.favorite} onClick={() => set({ favorite: !params.favorite })}>★ Favourites</Chip>
+          <Chip on={params.shared} onClick={() => set({ shared: !params.shared })}>⇄ Shared with me</Chip>
           <Chip on={params.untagged} onClick={() => set({ untagged: !params.untagged })} count={facets?.untagged}>Untagged</Chip>
           <Chip on={params.correspondent === 'none'} onClick={() => set({ correspondent: params.correspondent === 'none' ? '' : 'none' })} count={facets?.no_correspondent}>No correspondent</Chip>
           <Chip on={params.document_type === 'none'} onClick={() => set({ document_type: params.document_type === 'none' ? '' : 'none' })} count={facets?.no_type}>No type</Chip>
@@ -149,7 +150,7 @@ export default function Documents() {
           </Menu>}
           <button className="btn sm" onClick={() => setSaveView(true)} title="Save this search as a view">{savedView ? '★ ' + savedView.name : '☆ Save view'}</button>
         </div>
-        {sel.size > 0 && <BulkBar count={sel.size} onClear={() => setSel(new Set())} onAll={() => setSel(new Set(data?.results.map(d => d.id)))} allSel={allSel} bulk={bulk} />}
+        {sel.size > 0 && <BulkBar count={sel.size} onClear={() => setSel(new Set())} onAll={() => setSel(new Set(data?.results.map(d => d.id)))} allSel={allSel} bulk={bulk} ids={Array.from(sel)} reloadAll={() => { setData(null); set({ page: params.page }) }} />}
         {loading && !data ? <Loading /> : !data || data.results.length === 0 ? <Empty title={params.q || activeFilters ? 'Nothing matches' : 'No documents yet'}>{params.q || activeFilters ? 'Try fewer filters or other words. Searches match word beginnings, and fall back to substrings.' : 'Upload a scan or drop a file into the consume folder.'}</Empty> : (
           <>
             <div className="muted small list-count">{plural(total, 'document')}{params.q && ` for “${params.q}”`}{loading && ' …'}</div>
@@ -230,9 +231,10 @@ function FacetList({ items, counts, selected, excluded = [], onToggle, onExclude
   )
 }
 
-function BulkBar({ count, onClear, onAll, allSel, bulk }: { count: number; onClear: () => void; onAll: () => void; allSel: boolean; bulk: (body: Record<string, unknown>, msg: string) => Promise<void> }) {
+function BulkBar({ count, onClear, onAll, allSel, bulk, ids, reloadAll }: { count: number; onClear: () => void; onAll: () => void; allSel: boolean; bulk: (body: Record<string, unknown>, msg: string) => Promise<void>; ids: number[]; reloadAll: () => void }) {
   const { tax, reloadTax } = useApp()
   const [del, setDel] = useState(false)
+  const [merge, setMerge] = useState(false)
   const [tagsOp, setTagsOp] = useState<'add' | 'remove' | null>(null)
   const [pick, setPick] = useState<number[]>([])
   const [which, setWhich] = useState<'correspondent' | 'document_type' | 'storage_path' | null>(null)
@@ -254,7 +256,9 @@ function BulkBar({ count, onClear, onAll, allSel, bulk }: { count: number; onCle
         <button onClick={() => bulk({ op: 'reprocess' }, 'Queued for OCR')}>Run OCR again</button>
         <button onClick={() => bulk({ op: 'reprocess', mode: 'force' }, 'Queued for OCR')}>Force OCR (replace text layer)</button>
       </Menu>
+      {count >= 2 && <button className="btn sm" onClick={() => setMerge(true)}>Merge</button>}
       <button className="btn sm danger-text" onClick={() => setDel(true)}>Delete</button>
+      {merge && <MergeModal ids={ids} onClose={() => setMerge(false)} onDone={() => { setMerge(false); onClear(); reloadAll() }} />}
       {del && <Confirm title={`Move ${plural(count, 'document')} to the trash?`} message="They can be restored from the trash for a while." onCancel={() => setDel(false)} onConfirm={() => { setDel(false); bulk({ op: 'delete' }, 'Moved to trash') }} label="Delete" />}
       {tagsOp && <Modal title={tagsOp === 'add' ? 'Add tags' : 'Remove tags'} onClose={() => setTagsOp(null)}>
         <Picker multi options={tax.tags} value={pick} onChange={v => setPick(v as number[])} placeholder="Tags…" onCreate={tagsOp === 'add' ? create('tags') : undefined} />
@@ -265,6 +269,28 @@ function BulkBar({ count, onClear, onAll, allSel, bulk }: { count: number; onCle
         <div className="form-actions"><button className="btn" onClick={() => setWhich(null)}>Cancel</button><button className="btn primary" onClick={() => { const w = which; setWhich(null); bulk({ op: 'set_' + w, [w]: one }, 'Updated') }}>Apply</button></div>
       </Modal>}
     </div>
+  )
+}
+
+function MergeModal({ ids, onClose, onDone }: { ids: number[]; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast()
+  const navigate = useNavigate()
+  const [title, setTitle] = useState('')
+  const [del, setDel] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true)
+    try { const d = await api.post<Document>(`${V1}/documents/merge`, { ids, title, delete_originals: del }); toast('Merged; OCR running'); onDone(); navigate(`/documents/${d.id}`) } catch (err) { toast((err as Error).message, 'err') } finally { setBusy(false) }
+  }
+  return (
+    <Modal title={`Merge ${ids.length} documents`} onClose={onClose}>
+      <form onSubmit={go} className="grid" style={{ gap: 14 }}>
+        <p className="muted small">Their PDFs are joined in the order they were selected into a new document with the first one's details and every tag. The originals are kept unless you say otherwise.</p>
+        <Field label="Title of the new document"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="(first title) (merged)" autoFocus /></Field>
+        <label className="row"><input type="checkbox" checked={del} onChange={e => setDel(e.target.checked)} style={{ width: 'auto' }} /> Move the originals to the trash</label>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Merge</button></div>
+      </form>
+    </Modal>
   )
 }
 

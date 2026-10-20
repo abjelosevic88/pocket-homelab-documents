@@ -149,7 +149,7 @@ func (r *Rule) check() error {
 	if r.Name == "" {
 		return errors.New("a rule needs a name")
 	}
-	if r.Trigger != "updated" {
+	if r.Trigger != "updated" && r.Trigger != "scheduled" {
 		r.Trigger = "added"
 	}
 	return nil

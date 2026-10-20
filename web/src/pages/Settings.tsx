@@ -1,23 +1,25 @@
 import { useEffect, useState } from 'react'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { APIToken, Settings as SettingsT, User, Job, FolderInfo, FolderKind } from '../lib/types'
+import type { APIToken, Settings as SettingsT, User, Job, FolderInfo, FolderKind, Language } from '../lib/types'
 import { ago, bytes, stamp } from '../lib/format'
 import { Card, Confirm, Field, Loading, Modal, PageHeader, Segmented, Tabs, Toggle, useAsync, useToast } from '../components/ui'
 import { Avatar } from '../components/people'
 import { Link } from 'react-router-dom'
+import MailSettings from './settings/Mail'
 
-type Tab = 'ocr' | 'folder' | 'prefs' | 'users' | 'profile' | 'api' | 'data' | 'integrations' | 'about'
+type Tab = 'ocr' | 'folder' | 'mail' | 'prefs' | 'users' | 'profile' | 'api' | 'data' | 'integrations' | 'about'
 
 export default function Settings() {
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get('tab') as Tab) || 'ocr')
   return (
     <>
       <PageHeader title="Settings" />
-      <Tabs tabs={[{ id: 'ocr', label: 'OCR' }, { id: 'folder', label: 'Documents folder' }, { id: 'prefs', label: 'Preferences' }, { id: 'users', label: 'Users' }, { id: 'profile', label: 'Profile' }, { id: 'api', label: 'API tokens' }, { id: 'data', label: 'Import & export' }, { id: 'integrations', label: 'Integrations' }, { id: 'about', label: 'About' }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ id: 'ocr', label: 'OCR' }, { id: 'folder', label: 'Documents folder' }, { id: 'mail', label: 'Mail' }, { id: 'prefs', label: 'Preferences' }, { id: 'users', label: 'Users' }, { id: 'profile', label: 'Profile' }, { id: 'api', label: 'API tokens' }, { id: 'data', label: 'Import & export' }, { id: 'integrations', label: 'Integrations' }, { id: 'about', label: 'About' }]} value={tab} onChange={setTab} />
       <div className="mt">
         {tab === 'ocr' && <OCR />}
         {tab === 'folder' && <Folder />}
+        {tab === 'mail' && <MailSettings />}
         {tab === 'prefs' && <Prefs />}
         {tab === 'users' && <Users />}
         {tab === 'profile' && <Profile />}
@@ -70,6 +72,20 @@ function OCR() {
         </div>
       </Card>
       <div className="grid" style={{ gap: 16 }}>
+        <Languages inUse={f.ocr_language} onUse={code => setF({ ...f, ocr_language: f.ocr_language.split('+').filter(Boolean).includes(code) ? f.ocr_language : [...f.ocr_language.split('+').filter(Boolean), code].join('+') })} isAdmin={isAdmin} />
+        <Card title="Barcodes">
+          <p className="muted small">On new scans: a barcode reading <code>{f.barcode_asn_prefix || 'ASN'}00042</code> sets the archive serial number; a separator sheet (a barcode reading <code>{f.barcode_separator}</code>, print one and put it between documents in a batch) splits the scan into one document per section. Needs zbar{!t.zbar && ' — not installed on this server'}.</p>
+          <div className="grid" style={{ gap: 12 }}>
+            <Toggle checked={f.barcodes_enabled} onChange={v => setF({ ...f, barcodes_enabled: v })} label="Read barcodes on new documents" disabled={!isAdmin || !t.zbar} />
+            <div className="two-col tight">
+              <Field label="ASN prefix" help="Empty = no ASN barcodes."><input value={f.barcode_asn_prefix} onChange={e => setF({ ...f, barcode_asn_prefix: e.target.value })} disabled={!isAdmin} className="mono" /></Field>
+              <Field label="Separator code"><input value={f.barcode_separator} onChange={e => setF({ ...f, barcode_separator: e.target.value })} disabled={!isAdmin} className="mono" /></Field>
+            </div>
+            <Toggle checked={f.barcode_keep_separator} onChange={v => setF({ ...f, barcode_keep_separator: v })} label="Keep the separator page as the first page of the next document" disabled={!isAdmin} />
+            <Field label="Look at the first N pages"><input type="number" min={1} max={500} value={f.barcode_max_pages} onChange={e => setF({ ...f, barcode_max_pages: Number(e.target.value) })} disabled={!isAdmin} style={{ width: 120 }} /></Field>
+            {isAdmin && <div><button className="btn primary" onClick={() => save()} disabled={busy}>Save</button></div>}
+          </div>
+        </Card>
         <Card title="Files">
           <div className="grid" style={{ gap: 14 }}>
             <Field label="Consume folder" help="Files dropped here become documents. A sub-folder named like a person's email is theirs; other sub-folders become tags."><input value={f.consume_dir} readOnly className="mono" /></Field>
@@ -81,7 +97,7 @@ function OCR() {
         </Card>
         <Card title="Tools on this server">
           <table className="table compact"><tbody>
-            {[['ocrmypdf', t.ocrmypdf, t.versions.ocrmypdf], ['tesseract', t.tesseract, t.versions.tesseract], ['poppler (pdftotext, pdftoppm)', t.pdftotext && t.pdftoppm, t.versions.poppler], ['unpaper', t.unpaper, ''], ['Gotenberg (office → PDF)', t.gotenberg, '']].map(([n, ok, v]) => <tr key={String(n)}><th>{n}</th><td>{ok ? <span className="ok">✓ {v}</span> : <span className="muted">not available</span>}</td></tr>)}
+            {[['ocrmypdf', t.ocrmypdf, t.versions.ocrmypdf], ['tesseract', t.tesseract, t.versions.tesseract], ['poppler (pdftotext, pdftoppm)', t.pdftotext && t.pdftoppm, t.versions.poppler], ['qpdf (page tools)', t.qpdf, ''], ['unpaper', t.unpaper, ''], ['zbar (barcodes)', t.zbar, ''], ['Gotenberg (office → PDF)', t.gotenberg, '']].map(([n, ok, v]) => <tr key={String(n)}><th>{n}</th><td>{ok ? <span className="ok">✓ {v}</span> : <span className="muted">not available</span>}</td></tr>)}
             <tr><th>Workers</th><td className="muted">{f.ocr_workers} document{f.ocr_workers > 1 ? 's' : ''} at a time (OCR_WORKERS)</td></tr>
             <tr><th>Upload limit</th><td className="muted">{bytes(f.max_upload_bytes)} (MAX_UPLOAD_BYTES)</td></tr>
           </tbody></table>
@@ -170,6 +186,26 @@ function Folder() {
   )
 }
 
+function Languages({ inUse, onUse, isAdmin }: { inUse: string; onUse: (code: string) => void; isAdmin: boolean }) {
+  const { toast } = useToast()
+  const { data, setData } = useAsync(() => api.get<{ languages: Language[] }>(`${V1}/ocr/languages`), [])
+  const [busy, setBusy] = useState('')
+  const [q, setQ] = useState('')
+  if (!data) return <Loading />
+  const used = inUse.split('+').filter(Boolean)
+  const install = async (code: string) => { setBusy(code); try { const r = await api.post<{ languages: Language[] }>(`${V1}/ocr/languages`, { code }); setData({ languages: r.languages }); toast(`${code} installed`) } catch (e) { toast((e as Error).message, 'err') } finally { setBusy('') } }
+  const remove = async (code: string) => { setBusy(code); try { const r = await api.del<{ languages: Language[] }>(`${V1}/ocr/languages/${code}`); setData({ languages: r.languages }); toast(`${code} removed`) } catch (e) { toast((e as Error).message, 'err') } finally { setBusy('') } }
+  const list = data.languages.filter(l => !q || l.name.toLowerCase().includes(q.toLowerCase()) || l.code.includes(q.toLowerCase()))
+  const installed = list.filter(l => l.installed), more = list.filter(l => !l.installed)
+  return (
+    <Card title="Languages" actions={<input value={q} onChange={e => setQ(e.target.value)} placeholder="Find…" className="sm" style={{ width: 140 }} />}>
+      <p className="muted small">Installed packs can be used in the OCR languages above (click one to add it). More can be fetched from tessdata_best (the most accurate models) without rebuilding anything. Serbian is covered in both alphabets: <code>srp</code> (Cyrillic) and <code>srp_latn</code> (Latin).</p>
+      <div className="lang-grid">{installed.map(l => <span key={l.code} className={`chip ${used.includes(l.code) ? 'active' : ''}`} onClick={() => onUse(l.code)} title={l.source === 'system' ? 'Came with the image' : 'Downloaded'}>{l.name} <code>{l.code}</code>{isAdmin && l.source === 'downloaded' && <button type="button" className="x" onClick={e => { e.stopPropagation(); remove(l.code) }} aria-label="Remove">×</button>}</span>)}</div>
+      {isAdmin && more.length > 0 && <><h3 className="mt">Available</h3><div className="lang-grid">{more.slice(0, 60).map(l => <button key={l.code} type="button" className="chip" disabled={busy !== ''} onClick={() => install(l.code)}>{busy === l.code ? '…' : '⇣'} {l.name} <code>{l.code}</code></button>)}</div></>}
+    </Card>
+  )
+}
+
 function Prefs() {
   const { f, setF, save, busy } = useSettingsForm()
   const { user } = useApp()
@@ -185,7 +221,8 @@ function Prefs() {
             <Field label="Per page"><select value={f.page_size} onChange={e => setF({ ...f, page_size: Number(e.target.value) })}>{[25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}</select></Field>
             <Field label="Default sort"><select value={f.default_sort} onChange={e => setF({ ...f, default_sort: e.target.value })}><option value="-created">Newest first</option><option value="created">Oldest first</option><option value="-added">Recently added</option><option value="title">Title</option><option value="asn">ASN</option></select></Field>
           </div>
-          <Toggle checked={f.date_from_text} onChange={v => setF({ ...f, date_from_text: v })} label="Read the document date from the text when I did not set one" />
+          <Toggle checked={f.date_from_name} onChange={v => setF({ ...f, date_from_name: v })} label="Read the document date from the file name (2026-03-14_invoice.pdf, scan_20260314.pdf)" />
+          <Toggle checked={f.date_from_text} onChange={v => setF({ ...f, date_from_text: v })} label="… or from the text when I did not set one" />
           <Toggle checked={f.suggest_on_open} onChange={v => setF({ ...f, suggest_on_open: v })} label="Show suggestions (tags, correspondent, type, dates) when I open a document" />
           <div><button className="btn primary" onClick={() => save()} disabled={busy}>Save</button></div>
         </div>

@@ -12,7 +12,7 @@ const DefaultTitle = "Pocket Documents"
 // Defaults the environment may override at start (set by the server).
 var EnvDefaults = Settings{
 	Title: DefaultTitle, OCRLanguage: "eng", OCRMode: "skip", OCRDeskew: true, OCRRotate: true, OCROutputType: "pdfa",
-	TrashDays: 30, ConsumeSubdirsAsTags: true,
+	TrashDays: 30, ConsumeSubdirsAsTags: true, BarcodesEnabled: false, BarcodeASNPrefix: "ASN", BarcodeSeparator: "PATCHT", BarcodeMaxPages: 60, DateFromName: true,
 	FolderKind: "none", FolderName: "Documents", FolderFile: "archive", FolderInbox: true, FolderInboxName: "Inbox",
 	DateFormat: "iso", DefaultView: "table", PageSize: 50, DefaultSort: "-created", TitleFromName: true, DateFromText: true, SuggestOnOpen: true,
 	MoneyMode: "core",
@@ -95,6 +95,20 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			}
 		case "consume_subdirs_as_tags":
 			st.ConsumeSubdirsAsTags = v == "1"
+		case "barcodes_enabled":
+			st.BarcodesEnabled = v == "1"
+		case "barcode_asn_prefix":
+			st.BarcodeASNPrefix = v
+		case "barcode_separator":
+			if v != "" {
+				st.BarcodeSeparator = v
+			}
+		case "barcode_keep_separator":
+			st.BarcodeKeepSep = v == "1"
+		case "barcode_max_pages":
+			st.BarcodeMaxPages = atoi(v, st.BarcodeMaxPages)
+		case "date_from_name":
+			st.DateFromName = v != "0"
 		case "date_format":
 			if v == "iso" || v == "dmy-dot" || v == "long" {
 				st.DateFormat = v
@@ -147,6 +161,7 @@ func (s *Store) SaveBoxSettings(ctx context.Context, st Settings) error {
 		"ocr_language": st.OCRLanguage, "ocr_mode": st.OCRMode, "ocr_deskew": b2s(st.OCRDeskew), "ocr_rotate": b2s(st.OCRRotate), "ocr_clean": b2s(st.OCRClean),
 		"ocr_max_pages": strconv.Itoa(st.OCRMaxPages), "ocr_output_type": st.OCROutputType, "trash_days": strconv.Itoa(st.TrashDays),
 		"consume_subdirs_as_tags": b2s(st.ConsumeSubdirsAsTags),
+		"barcodes_enabled":        b2s(st.BarcodesEnabled), "barcode_asn_prefix": st.BarcodeASNPrefix, "barcode_separator": st.BarcodeSeparator, "barcode_keep_separator": b2s(st.BarcodeKeepSep), "barcode_max_pages": strconv.Itoa(st.BarcodeMaxPages),
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -165,7 +180,7 @@ func (s *Store) SaveBoxSettings(ctx context.Context, st Settings) error {
 func (s *Store) SaveSettings(ctx context.Context, userID int64, st Settings) error {
 	vals := map[string]string{
 		"date_format": st.DateFormat, "default_view": st.DefaultView, "page_size": strconv.Itoa(st.PageSize), "default_sort": st.DefaultSort,
-		"title_from_name": b2s(st.TitleFromName), "date_from_text": b2s(st.DateFromText), "suggest_on_open": b2s(st.SuggestOnOpen),
+		"title_from_name": b2s(st.TitleFromName), "date_from_text": b2s(st.DateFromText), "date_from_name": b2s(st.DateFromName), "suggest_on_open": b2s(st.SuggestOnOpen),
 		"money_mode": st.MoneyMode, "money_url": strings.TrimSpace(st.MoneyURL), "money_account": strconv.FormatInt(st.MoneyAccount, 10),
 		"notify_url": strings.TrimSpace(st.NotifyURL),
 	}

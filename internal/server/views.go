@@ -125,6 +125,9 @@ func (s *Server) handleUpdateRule(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if in.Trigger == "scheduled" && (in.Filters.ScheduleField != cur.Filters.ScheduleField || in.Filters.ScheduleOffsetDays != cur.Filters.ScheduleOffsetDays) {
+		s.store.ResetRuleRuns(ctx, in.ID)
+	}
 	writeJSON(w, http.StatusOK, in)
 }
 

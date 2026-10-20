@@ -9,7 +9,9 @@ import (
 // FTSQuery turns free text into an FTS5 MATCH expression: every word becomes
 // a quoted prefix token, quoted phrases stay phrases, and words starting with
 // - are excluded. Returns "" when nothing is left.
-func FTSQuery(q string) string {
+func FTSQuery(q string) string { return ftsQuery(q, true) }
+
+func ftsQuery(q string, translit bool) string {
 	var pos, neg []string
 	for _, tok := range splitQuery(q) {
 		negate := false
@@ -50,6 +52,16 @@ func FTSQuery(q string) string {
 		return ""
 	}
 	out := strings.Join(pos, " ")
+	// a query in one Serbian alphabet is tried in the other too
+	if translit && HasCyrillic(q) {
+		if alt := ftsQuery(CyrToLat(q), false); alt != "" && alt != out {
+			out = "(" + out + ") OR (" + alt + ")"
+		}
+	} else if translit && IsLatinSerbianish(q) {
+		if alt := ftsQuery(LatToCyr(q), false); alt != "" && alt != out {
+			out = "(" + out + ") OR (" + alt + ")"
+		}
+	}
 	for _, n := range neg {
 		out = "(" + out + ") NOT (" + n + ")"
 	}
@@ -98,6 +110,7 @@ func init() {
 	for _, w := range strings.Fields(`the and for with that this from are was were have has not you your our its der die das und ist von mit den dem des ein eine für auf nicht sie wir
 	les des une est pour dans sur par avec que qui pas vous nous il elle
 	i u na za je se su sa od do ne da ili ali kao što sve ovo ova ovaj koji koja koje biti bio bila bili
+	и у на за је се су са од до не да или али као што све ово ова овај који која које бити био била били
 	de la el en los las por con para una del que como más sus
 	page total date invoice number amount tel fax email www http https com net org gmbh ltd inc llc
 	jan feb mar apr may jun jul aug sep oct nov dec`) {

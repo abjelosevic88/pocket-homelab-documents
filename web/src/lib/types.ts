@@ -42,7 +42,13 @@ export interface Document {
   rank?: number
   correspondent_name?: string
   document_type_name?: string
+  access?: 'owner' | 'view' | 'edit'
+  owner_name?: string
+  shared_tags?: string[]
 }
+export interface Version { id: number; document_id: number; n: number; ext: string; size: number; checksum: string; reason: string; actor: string; created_at: string }
+export interface DocShare { user_id: number; level: 'view' | 'edit'; name?: string; email?: string; created_at: string }
+export interface Language { code: string; name: string; installed: boolean; source?: 'system' | 'downloaded' }
 
 export interface Facets { tags: Record<string, number>; correspondents: Record<string, number>; document_types: Record<string, number>; storage_paths: Record<string, number>; status: Record<string, number>; untagged: number; no_correspondent: number; no_type: number }
 export interface ListResult { results: Document[]; count: number; facets: Facets | null; offset: number; limit: number }
@@ -51,15 +57,15 @@ export interface Note { id: number; document_id: number; user_id: number; text: 
 export interface HistoryEntry { id: number; document_id: number; actor: string; action: string; changes: Record<string, unknown>; created_at: string }
 export interface Job { id: number; user_id: number; document_id: number | null; kind: string; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'; attempts: number; progress: string; log?: string; error: string; params: Record<string, unknown>; created_at: string; started_at: string | null; finished_at: string | null; document_title?: string }
 export interface SavedView { id: number; name: string; query: Record<string, unknown>; on_dashboard: boolean; in_sidebar: boolean; position: number; created_at: string }
-export interface RuleFilters { filename: string; path: string; source: string; mime: string; content: string; correspondent: number | null; document_type: number | null; tags: number[] }
-export interface RuleActions { title: string; add_tags: number[]; remove_tags: number[]; correspondent: number | null; document_type: number | null; storage_path: number | null; fields: Record<string, string>; favorite: boolean | null; skip_matching: boolean }
-export interface Rule { id: number; name: string; enabled: boolean; trigger: 'added' | 'updated'; position: number; filters: RuleFilters; actions: RuleActions; created_at: string }
+export interface RuleFilters { filename: string; path: string; source: string; mime: string; content: string; correspondent: number | null; document_type: number | null; tags: number[]; schedule_field?: string; schedule_offset_days?: number }
+export interface RuleActions { title: string; add_tags: number[]; remove_tags: number[]; correspondent: number | null; document_type: number | null; storage_path: number | null; fields: Record<string, string>; favorite: boolean | null; skip_matching: boolean; notify?: boolean; notify_message?: string }
+export interface Rule { id: number; name: string; enabled: boolean; trigger: 'added' | 'updated' | 'scheduled'; position: number; filters: RuleFilters; actions: RuleActions; created_at: string }
 export interface Share { id: number; document_id: number; document_title?: string; token: string; file: 'archive' | 'original'; expires_at: string | null; views: number; created_at: string; url: string }
 export interface Suggestions { tags: number[]; correspondents: number[]; document_types: number[]; storage_paths: number[]; dates: string[]; confidence: Record<string, number>; trained_on: number }
 
 export interface Taxonomy { tags: Tag[]; correspondents: Named[]; document_types: Named[]; storage_paths: Named[]; custom_fields: CustomField[]; saved_views: SavedView[] }
 
-export interface Tools { ocrmypdf: boolean; tesseract: boolean; pdftotext: boolean; pdftoppm: boolean; pdfinfo: boolean; qpdf: boolean; unpaper: boolean; languages: string[]; gotenberg: boolean; versions: Record<string, string> }
+export interface Tools { ocrmypdf: boolean; tesseract: boolean; pdftotext: boolean; pdftoppm: boolean; pdfinfo: boolean; qpdf: boolean; unpaper: boolean; zbar: boolean; languages: string[]; gotenberg: boolean; versions: Record<string, string> }
 
 export interface Settings {
   title: string
@@ -80,7 +86,13 @@ export interface Settings {
   default_sort: string
   title_from_name: boolean
   date_from_text: boolean
+  date_from_name: boolean
   suggest_on_open: boolean
+  barcodes_enabled: boolean
+  barcode_asn_prefix: string
+  barcode_separator: string
+  barcode_keep_separator: boolean
+  barcode_max_pages: number
   money_mode: 'core' | 'direct' | 'off'
   money_url: string
   money_token_set: boolean

@@ -154,6 +154,8 @@ function Rules() {
     if (r.filters.document_type) f.push(`type ${name(tax.document_types, r.filters.document_type)}`)
     if (r.filters.tags?.length) f.push(`tagged ${r.filters.tags.map(t => name(tax.tags, t)).join(', ')}`)
     const a: string[] = []
+    if (r.trigger === 'scheduled') f.push(`${Math.abs(r.filters.schedule_offset_days || 0)} days ${(r.filters.schedule_offset_days || 0) < 0 ? 'before' : 'after'} ${r.filters.schedule_field === 'added' ? 'added' : r.filters.schedule_field?.startsWith('cf:') ? `“${name(tax.custom_fields, Number(r.filters.schedule_field.slice(3)))}”` : 'the document date'}`)
+    if (r.actions.notify) a.push('send a message')
     if (r.actions.title) a.push(`title “${r.actions.title}”`)
     if (r.actions.add_tags?.length) a.push(`+ ${r.actions.add_tags.map(t => name(tax.tags, t)).join(', ')}`)
     if (r.actions.remove_tags?.length) a.push(`− ${r.actions.remove_tags.map(t => name(tax.tags, t)).join(', ')}`)
@@ -166,7 +168,7 @@ function Rules() {
   return (
     <Card title="Rules" actions={<button className="btn primary sm" onClick={() => setEdit({ enabled: true, trigger: 'added', filters: { filename: '', path: '', source: '', mime: '', content: '', correspondent: null, document_type: null, tags: [] }, actions: { title: '', add_tags: [], remove_tags: [], correspondent: null, document_type: null, storage_path: null, fields: {}, favorite: null, skip_matching: false } })}>+ Rule</button>}>
       <p className="muted small">When a document comes in (after OCR and the matching above) or is changed, rules that fit are applied in order. “Run now” applies a rule to everything already here.</p>
-      {!rules ? null : rules.length === 0 ? <p className="muted">No rules yet. Example: file name <code>*ikea*</code> → correspondent IKEA, tag Receipts, title <code>{'IKEA {created}'}</code>.</p> : <table className="table compact"><thead><tr><th /><th>Rule</th><th>When</th><th>Then</th><th /></tr></thead><tbody>{rules.map(r => { const d = describe(r); return <tr key={r.id} className={r.enabled ? '' : 'muted'}><td><Toggle checked={r.enabled} onChange={async v => { await api.put(`${V1}/rules/${r.id}`, { ...r, enabled: v }); load() }} /></td><td>{r.name}<div className="muted small">on {r.trigger}</div></td><td className="small">{d.when}</td><td className="small">{d.then}</td><td className="right nowrap"><button className="btn ghost sm" onClick={async () => { await api.post(`${V1}/rules/${r.id}/run`); toast('Running on all documents (see Processing)') }}>Run now</button><button className="btn ghost sm" onClick={() => setEdit(r)}>Edit</button><button className="btn ghost sm danger-text" onClick={() => setDel(r)}>Delete</button></td></tr> })}</tbody></table>}
+      {!rules ? null : rules.length === 0 ? <p className="muted">No rules yet. Example: file name <code>*ikea*</code> → correspondent IKEA, tag Receipts, title <code>{'IKEA {created}'}</code>.</p> : <table className="table compact"><thead><tr><th /><th>Rule</th><th>When</th><th>Then</th><th /></tr></thead><tbody>{rules.map(r => { const d = describe(r); return <tr key={r.id} className={r.enabled ? '' : 'muted'}><td><Toggle checked={r.enabled} onChange={async v => { await api.put(`${V1}/rules/${r.id}`, { ...r, enabled: v }); load() }} /></td><td>{r.name}<div className="muted small">{r.trigger === 'scheduled' ? 'on a date' : `on ${r.trigger}`}</div></td><td className="small">{d.when}</td><td className="small">{d.then}</td><td className="right nowrap"><button className="btn ghost sm" onClick={async () => { await api.post(`${V1}/rules/${r.id}/run`); toast('Running on all documents (see Processing)') }}>Run now</button><button className="btn ghost sm" onClick={() => setEdit(r)}>Edit</button><button className="btn ghost sm danger-text" onClick={() => setDel(r)}>Delete</button></td></tr> })}</tbody></table>}
       {edit && <RuleModal item={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); reloadTax() }} />}
       {del && <Confirm title={`Delete the rule “${del.name}”?`} message="Documents it already changed stay as they are." onCancel={() => setDel(null)} onConfirm={async () => { const d = del; setDel(null); await api.del(`${V1}/rules/${d.id}`); load() }} label="Delete" />}
     </Card>
@@ -189,8 +191,12 @@ function RuleModal({ item, onClose, onSaved }: { item: Partial<Rule>; onClose: (
       <form onSubmit={save} className="grid" style={{ gap: 14 }}>
         <div className="two-col tight">
           <Field label="Name"><input value={r.name || ''} onChange={e => setR({ ...r, name: e.target.value })} autoFocus required /></Field>
-          <Field label="Runs when" group><Segmented value={r.trigger || 'added'} onChange={v => setR({ ...r, trigger: v as Rule['trigger'] })} options={[{ value: 'added', label: 'A document comes in' }, { value: 'updated', label: 'A document is changed' }]} /></Field>
+          <Field label="Runs when" group><Segmented value={r.trigger || 'added'} onChange={v => setR({ ...r, trigger: v as Rule['trigger'] })} options={[{ value: 'added', label: 'Comes in' }, { value: 'updated', label: 'Is changed' }, { value: 'scheduled', label: 'On a date' }]} /></Field>
         </div>
+        {r.trigger === 'scheduled' && <div className="two-col tight">
+          <Field label="Relative to" help="Fires once per document, also for documents already past the date (up to a year late)."><select value={f.schedule_field || 'created'} onChange={e => setF({ schedule_field: e.target.value })}><option value="created">the document date</option><option value="added">the day it was added</option>{tax.custom_fields.filter(c => c.data_type === 'date').map(c => <option key={c.id} value={`cf:${c.id}`}>the field “{c.name}”</option>)}</select></Field>
+          <Field label="Offset in days" help="Negative = before that date (−30: a month before a contract expires), positive = after."><input type="number" value={f.schedule_offset_days ?? 0} onChange={e => setF({ schedule_offset_days: Number(e.target.value) })} /></Field>
+        </div>}
         <h3>When all of these fit (empty = any)</h3>
         <div className="two-col tight">
           <Field label="File name" help="* and ? wildcards, case does not matter"><input value={f.filename} onChange={e => setF({ filename: e.target.value })} placeholder="*invoice*.pdf" className="mono" /></Field>
@@ -211,6 +217,8 @@ function RuleModal({ item, onClose, onSaved }: { item: Partial<Rule>; onClose: (
           <Field label="Storage path" group><Picker options={tax.storage_paths} value={a.storage_path} onChange={v => setA({ storage_path: v as number | null })} /></Field>
           <Field label="Favourite" group><Segmented value={a.favorite === null || a.favorite === undefined ? 'keep' : a.favorite ? 'yes' : 'no'} onChange={v => setA({ favorite: v === 'keep' ? null : v === 'yes' })} options={[{ value: 'keep', label: 'keep' }, { value: 'yes', label: 'yes' }, { value: 'no', label: 'no' }]} size="sm" /></Field>
         </div>
+        <Toggle checked={!!a.notify} onChange={v => setA({ notify: v })} label="Send a message (Settings → Integrations → Notifications)" />
+        {a.notify && <Field label="Message" help="Placeholders: {title} {created} {correspondent} {document_type} {asn} {rule}. A link to the document is added."><input value={a.notify_message || ''} onChange={e => setA({ notify_message: e.target.value })} placeholder="{title} expires in 30 days" /></Field>}
         {tax.custom_fields.length > 0 && <Field label="Set custom fields" group><div className="grid" style={{ gap: 6 }}>{tax.custom_fields.map(cf => <div key={cf.id} className="row"><span className="label" style={{ width: 140 }}>{cf.name}</span><input value={a.fields?.[String(cf.id)] || ''} onChange={e => { const fields = { ...(a.fields || {}) }; if (e.target.value) fields[String(cf.id)] = e.target.value; else delete fields[String(cf.id)]; setA({ fields }) }} placeholder="leave empty to not set" /></div>)}</div></Field>}
         <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Save</button></div>
       </form>

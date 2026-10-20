@@ -2,18 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { Document, HistoryEntry, Job, Note, Share, Suggestions, CustomField, FieldValue } from '../lib/types'
+import type { Document, HistoryEntry, Job, Note, Share, Suggestions, CustomField, FieldValue, Version, DocShare } from '../lib/types'
 import { ago, bytes, fileIcon, fmtDate, money, plural, stamp } from '../lib/format'
 import { Card, Confirm, Field, Loading, Menu, Modal, Segmented, Tabs, useToast } from '../components/ui'
 import { Picker } from '../components/Picker'
 import { TagChip } from '../components/docs'
 
-type Tab = 'details' | 'content' | 'notes' | 'history' | 'similar'
+type Tab = 'details' | 'content' | 'notes' | 'history' | 'similar' | 'versions'
 
 export default function DocumentPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { tax, reloadTax, settings, stamp: changeStamp, bump } = useApp()
+  const { tax, reloadTax, settings, stamp: changeStamp, bump, users, user } = useApp()
   const { toast } = useToast()
   const [doc, setDoc] = useState<Document | null>(null)
   const [nav, setNav] = useState<{ prev: number; next: number }>({ prev: 0, next: 0 })
@@ -24,6 +24,11 @@ export default function DocumentPage() {
   const [del, setDel] = useState(false)
   const [share, setShare] = useState(false)
   const [moneyOpen, setMoneyOpen] = useState(false)
+  const [shareWith, setShareWith] = useState(false)
+  const [langOpen, setLangOpen] = useState(false)
+  const [selPages, setSelPages] = useState<number[]>([])
+  const [splitOpen, setSplitOpen] = useState(false)
+  const replaceInput = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<'pages' | 'pdf'>(() => (localStorage.getItem('pd-preview') as 'pages' | 'pdf') || (window.innerWidth < 900 ? 'pages' : 'pdf'))
   const [saving, setSaving] = useState(false)
   const [similar, setSimilar] = useState<Document[] | null>(null)
@@ -36,7 +41,7 @@ export default function DocumentPage() {
     setForm(f => (f && dirty) ? f : { ...r.document })
     return r.document
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setForm(null); setSugg(null); setSimilar(null); setTab('details'); load().catch(e => toast((e as Error).message, 'err')) }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setForm(null); setSugg(null); setSimilar(null); setTab('details'); setSelPages([]); load().catch(e => toast((e as Error).message, 'err')) }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
   // keep in step with the worker
   useEffect(() => { if (doc && (doc.status === 'pending' || doc.status === 'processing')) load().catch(() => {}) }, [changeStamp]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -78,7 +83,22 @@ export default function DocumentPage() {
   const create = (kind: 'tags' | 'correspondents' | 'document_types' | 'storage_paths') => async (name: string) => { const o = await api.post<{ id: number; name: string; color?: string }>(`${V1}/${kind}`, { name }); await reloadTax(); return o }
   const act = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); toast(msg); await load(); bump() } catch (e) { toast((e as Error).message, 'err') } }
   if (!doc || !form) return <Loading />
+  const access = doc.access || 'owner'
+  const isOwner = access === 'owner'
+  const canEdit = access !== 'view'
   const applySugg = (patch: Partial<Document>) => setForm(f => ({ ...f, ...patch }))
+  const pageOp = async (body: Record<string, unknown>, msg: string) => {
+    try { await api.post(`${V1}/documents/${doc.id}/pages`, body); toast(msg); setSelPages([]); await load(); bump() } catch (e) { toast((e as Error).message, 'err') }
+  }
+  const replace = async (file: File) => {
+    const fd = new FormData(); fd.append('document', file)
+    const res = await fetch(`${V1}/documents/${doc.id}/replace`, { method: 'POST', body: fd, credentials: 'same-origin' })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { toast(j.error || res.statusText, 'err'); return }
+    toast('File replaced; OCR running'); await load(); bump()
+  }
+  const hasPDFSource = doc.has_archive || doc.mime === 'application/pdf'
+  const toggleSel = (n: number) => setSelPages(p => p.includes(n) ? p.filter(x => x !== n) : [...p, n].sort((a, b) => a - b))
   const hasPDF = doc.has_archive || doc.mime === 'application/pdf'
   const isImage = doc.mime.startsWith('image/')
   const suggTags = (sugg?.tags || []).filter(t => !(form.tags || []).includes(t))
@@ -105,15 +125,20 @@ export default function DocumentPage() {
         <Menu align="right" button={<button className="btn sm">More ▾</button>}>
           {doc.has_archive && <a href={`${V1}/documents/${doc.id}/download?original=1`}>Download original ({doc.original_name.split('.').pop()?.toUpperCase()})</a>}
           <a href={`${V1}/documents/${doc.id}/preview`} target="_blank" rel="noreferrer">Open in a new tab</a>
-          <button onClick={() => setShare(true)}>Share link…</button>
+          {isOwner && <button onClick={() => setShare(true)}>Share link…</button>}
+          {isOwner && users.length > 1 && <button onClick={() => setShareWith(true)}>Share with someone here…</button>}
+          {isOwner && <button onClick={() => replaceInput.current?.click()}>Replace the file…</button>}
+          {isOwner && <button onClick={() => setLangOpen(true)}>Run OCR again with other languages…</button>}
           <button onClick={() => setMoneyOpen(true)}>Book in Pocket Money…</button>
           <button onClick={() => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, {}), 'Queued for OCR')}>Run OCR again</button>
           <button onClick={() => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, { mode: 'force', force_text: true }), 'Queued for OCR')}>Force OCR (replace text layer)</button>
           <button onClick={() => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, { mode: 'redo' }), 'Queued for OCR')}>Redo OCR (keep vector text)</button>
-          <button className="danger-text" onClick={() => setDel(true)}>Move to trash</button>
+          {isOwner && <button className="danger-text" onClick={() => setDel(true)}>Move to trash</button>}
         </Menu>
-        <button className="btn primary sm" disabled={!dirty || saving} onClick={save} title="⌘S">{saving ? 'Saving…' : 'Save'}</button>
+        <button className="btn primary sm" disabled={!dirty || saving || !canEdit} onClick={save} title="⌘S">{saving ? 'Saving…' : 'Save'}</button>
+        <input ref={replaceInput} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.docx,.xlsx,.pptx,.odt,.txt,.md,.html,.eml" onChange={e => { if (e.target.files?.[0]) replace(e.target.files[0]); e.target.value = '' }} />
       </div>
+      {!isOwner && <div className="shared-banner">⇄ Shared with you by <b>{doc.owner_name}</b> · {access === 'edit' ? 'you can change its details and add notes' : 'view only'}</div>}
       {doc.status === 'failed' && <div className="callout danger mb"><b>OCR failed:</b> {doc.status_message} <button className="link-btn" onClick={() => navigate('/jobs')}>See the log</button></div>}
       {job && doc.status !== 'done' && job.progress && <div className="callout mb small">{job.progress}</div>}
       <div className="doc-split">
@@ -128,9 +153,20 @@ export default function DocumentPage() {
             {suggTags.map(t => { const tag = tax.tags.find(x => x.id === t); return tag ? <TagChip key={'g' + t} tag={tag} small onClick={() => applySugg({ tags: [...(form.tags || []), t] })} /> : null })}
             <button className="link-btn small" onClick={() => applySugg({ created: suggDates[0] || form.created, correspondent: form.correspondent ?? suggCorr[0] ?? null, document_type: form.document_type ?? suggType[0] ?? null, storage_path: form.storage_path ?? suggPath[0] ?? null, tags: [...(form.tags || []), ...suggTags] })}>apply all</button>
           </div>}
-          <Tabs value={tab} onChange={setTab} tabs={[{ id: 'details', label: 'Details' }, { id: 'content', label: 'Text' }, { id: 'notes', label: <>Notes{doc.notes_count ? <span className="count">{doc.notes_count}</span> : null}</> }, { id: 'history', label: 'History' }, { id: 'similar', label: 'Similar' }]} />
+          <Tabs value={tab} onChange={setTab} tabs={[{ id: 'details', label: 'Details' }, { id: 'content', label: 'Text' }, { id: 'notes', label: <>Notes{doc.notes_count ? <span className="count">{doc.notes_count}</span> : null}</> }, { id: 'history', label: 'History' }, ...(isOwner ? [{ id: 'versions' as Tab, label: 'Versions' }, { id: 'similar' as Tab, label: 'Similar' }] : [])]} />
           <div className="tab-body">
-            {tab === 'details' && <div className="grid" style={{ gap: 12 }}>
+            {tab === 'versions' && <VersionsTab doc={doc} onChange={load} />}
+            {tab === 'details' && !isOwner && <div className="grid" style={{ gap: 10 }}>
+              <div className="row wrap"><span className="muted small">Tags:</span>{(doc.shared_tags || []).map(t => <span key={t} className="chip-tag sm" style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text)' }}>{t}</span>)}{!(doc.shared_tags || []).length && <span className="muted small">none</span>}</div>
+              <table className="table compact meta-table"><tbody>
+                <tr><th>Correspondent</th><td>{doc.correspondent_name || '—'}</td></tr>
+                <tr><th>Type</th><td>{doc.document_type_name || '—'}</td></tr>
+                <tr><th>Date</th><td>{canEdit ? <input type="date" value={form.created || ''} onChange={e => setForm({ ...form, created: e.target.value })} style={{ width: 180 }} /> : fmtDate(doc.created)}</td></tr>
+                <tr><th>ASN</th><td>{doc.asn ?? '—'}</td></tr>
+                <tr><th>File</th><td>{fileIcon(doc.mime, doc.original_name)} {doc.original_name} · {bytes(doc.size)}{doc.page_count > 0 && <> · {plural(doc.page_count, 'page')}</>}</td></tr>
+              </tbody></table>
+            </div>}
+            {tab === 'details' && isOwner && <div className="grid" style={{ gap: 12 }}>
               <div className="two-col tight">
                 <Field label="Document date"><input type="date" value={form.created || ''} onChange={e => setForm({ ...form, created: e.target.value })} /></Field>
                 <Field label="Archive serial number" help="Write it on the paper; find it later with asn:12"><div className="row"><input value={form.asn ?? ''} onChange={e => setForm({ ...form, asn: e.target.value === '' ? null : Number(e.target.value) })} inputMode="numeric" placeholder="none" /><button type="button" className="btn sm" title="Next free number" onClick={() => api.get<{ next_asn: number }>(`${V1}/documents/next_asn`).then(r => setForm(f => ({ ...f, asn: r.next_asn })))}>next</button></div></Field>
@@ -165,8 +201,19 @@ export default function DocumentPage() {
             <span className="spacer" />
             <span className="muted small">{doc.page_count > 0 && plural(doc.page_count, 'page')}</span>
           </div>
+          {isOwner && (hasPDFSource || isImage) && doc.status === 'done' && <div className="page-tools">
+            {hasPDFSource && preview === 'pages' ? <span className="muted">{selPages.length ? `${selPages.length} selected` : 'Tap page numbers to select'}</span> : <span className="muted">Whole file:</span>}
+            <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 90, pages: selPages }, 'Rotated')}>↻ 90°</button>
+            <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 270, pages: selPages }, 'Rotated')}>↺ 90°</button>
+            <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 180, pages: selPages }, 'Rotated')}>180°</button>
+            {hasPDFSource && selPages.length > 0 && <>
+              <button className="btn xs" onClick={() => setSplitOpen(true)}>Split off → new document</button>
+              <button className="btn xs danger-text" onClick={() => pageOp({ op: 'delete', pages: selPages }, 'Pages removed')}>Delete pages</button>
+              <button className="btn ghost xs" onClick={() => setSelPages([])}>Clear</button>
+            </>}
+          </div>}
           {hasPDF && preview === 'pdf' && <iframe className="pdf-frame" src={`${V1}/documents/${doc.id}/preview#view=FitH`} title="PDF" />}
-          {hasPDF && preview === 'pages' && <PageImages doc={doc} />}
+          {hasPDF && preview === 'pages' && <PageImages doc={doc} selected={selPages} onToggle={isOwner ? toggleSel : undefined} />}
           {!hasPDF && isImage && <div className="image-preview"><img src={`${V1}/documents/${doc.id}/preview`} alt="" /></div>}
           {!hasPDF && !isImage && <div className="text-preview"><div className="muted small mb">{fileIcon(doc.mime, doc.original_name)} {doc.original_name} — no PDF twin (set GOTENBERG_URL to render office files); the text:</div><pre>{doc.content || 'No text.'}</pre></div>}
         </div>
@@ -174,6 +221,11 @@ export default function DocumentPage() {
       {del && <Confirm title="Move to the trash?" message="It can be restored from the trash for a while." onCancel={() => setDel(false)} onConfirm={async () => { setDel(false); await api.del(`${V1}/documents/${doc.id}`); toast('Moved to trash'); bump(); navigate(nav.next ? `/documents/${nav.next}` : '/documents') }} label="Delete" />}
       {share && <ShareModal doc={doc} onClose={() => setShare(false)} />}
       {moneyOpen && <MoneyModal doc={doc} onClose={() => setMoneyOpen(false)} onBooked={load} />}
+      {shareWith && <ShareWithModal doc={doc} users={users.filter(u => u.id !== user?.id)} onClose={() => setShareWith(false)} />}
+      {langOpen && <LanguageModal doc={doc} onClose={() => setLangOpen(false)} onDone={() => { setLangOpen(false); load() }} />}
+      {splitOpen && <Modal title={`Split ${selPages.length} page${selPages.length > 1 ? 's' : ''} off`} onClose={() => setSplitOpen(false)}>
+        <SplitForm doc={doc} pages={selPages} onClose={() => setSplitOpen(false)} onDone={nd => { setSplitOpen(false); setSelPages([]); toast('New document made'); navigate(`/documents/${nd.id}`) }} />
+      </Modal>}
     </div>
   )
 }
@@ -188,7 +240,82 @@ function conf(s: Suggestions | null, kind: string, id: number) {
   return <small className="muted"> {Math.round(c * 100)}%</small>
 }
 
-function PageImages({ doc }: { doc: Document }) {
+function SplitForm({ doc, pages, onClose, onDone }: { doc: Document; pages: number[]; onClose: () => void; onDone: (d: Document) => void }) {
+  const { toast } = useToast()
+  const [title, setTitle] = useState(doc.title + ' (part)')
+  const [remove, setRemove] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true)
+    try { onDone(await api.post<Document>(`${V1}/documents/${doc.id}/pages`, { op: 'split', pages, title, remove })) } catch (err) { toast((err as Error).message, 'err') } finally { setBusy(false) }
+  }
+  return (
+    <form onSubmit={go} className="grid" style={{ gap: 14 }}>
+      <p className="muted small">Pages {pages.join(', ')} become a new document with the same tags, correspondent and type; OCR runs on it.</p>
+      <Field label="Title"><input value={title} onChange={e => setTitle(e.target.value)} autoFocus /></Field>
+      <label className="row"><input type="checkbox" checked={remove} onChange={e => setRemove(e.target.checked)} style={{ width: 'auto' }} /> Take the pages out of this document (the old file is kept as a version)</label>
+      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Split</button></div>
+    </form>
+  )
+}
+
+function VersionsTab({ doc, onChange }: { doc: Document; onChange: () => Promise<unknown> }) {
+  const { toast } = useToast()
+  const [list, setList] = useState<Version[] | null>(null)
+  useEffect(() => { api.get<Version[]>(`${V1}/documents/${doc.id}/versions`).then(setList) }, [doc.id, doc.modified_at])
+  if (!list) return <Loading />
+  if (list.length === 0) return <p className="muted">No earlier files. Rotating pages, removing pages, splitting and replacing the file keep the previous file here.</p>
+  return (
+    <table className="table compact"><thead><tr><th>#</th><th>Why</th><th>File</th><th>When</th><th /></tr></thead><tbody>
+      {list.map(v => <tr key={v.id}><td className="muted">v{v.n}</td><td>{v.reason}<div className="muted small">{v.actor}</div></td><td className="muted small">.{v.ext} · {bytes(v.size)}</td><td className="muted small" title={stamp(v.created_at)}>{ago(v.created_at)}</td><td className="right nowrap"><a className="btn ghost xs" href={`${V1}/documents/${doc.id}/versions/${v.n}/download`}>Download</a><button className="btn ghost xs" onClick={async () => { try { await api.post(`${V1}/documents/${doc.id}/versions/${v.n}/restore`); toast('Restored; OCR running'); onChange() } catch (e) { toast((e as Error).message, 'err') } }}>Restore</button></td></tr>)}
+    </tbody></table>
+  )
+}
+
+function ShareWithModal({ doc, users, onClose }: { doc: Document; users: { id: number; name: string; email: string }[]; onClose: () => void }) {
+  const { toast } = useToast()
+  const [list, setList] = useState<DocShare[] | null>(null)
+  const [uid, setUid] = useState<number>(users[0]?.id || 0)
+  const [level, setLevel] = useState<'view' | 'edit'>('view')
+  const load = useCallback(() => api.get<DocShare[]>(`${V1}/documents/${doc.id}/shared_with`).then(setList), [doc.id])
+  useEffect(() => { load() }, [load])
+  const add = async () => { try { setList(await api.post<DocShare[]>(`${V1}/documents/${doc.id}/shared_with`, { user_id: uid, level })); toast('Shared') } catch (e) { toast((e as Error).message, 'err') } }
+  return (
+    <Modal title="Share with someone on this box" onClose={onClose}>
+      <p className="muted small">They see this one document under “Shared with me”, can open and download it, and with <i>edit</i> change its details and write notes. Nothing else of yours. Tags show as names only.</p>
+      <div className="row wrap mb">
+        <select value={uid} onChange={e => setUid(Number(e.target.value))} style={{ width: 'auto' }}>{users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}</select>
+        <Segmented size="sm" value={level} onChange={setLevel} options={[{ value: 'view', label: 'View' }, { value: 'edit', label: 'Edit' }]} />
+        <button className="btn primary sm" onClick={add} disabled={!uid}>Share</button>
+      </div>
+      {!list ? <Loading /> : list.length === 0 ? <p className="muted small">Not shared with anyone.</p> : <table className="table compact"><tbody>{list.map(s => <tr key={s.user_id}><td>{s.name || s.email}</td><td><span className="badge">{s.level}</span></td><td className="muted small">{ago(s.created_at)}</td><td className="right"><button className="btn ghost xs danger-text" onClick={async () => { await api.del(`${V1}/documents/${doc.id}/shared_with/${s.user_id}`); load() }}>Remove</button></td></tr>)}</tbody></table>}
+    </Modal>
+  )
+}
+
+function LanguageModal({ doc, onClose, onDone }: { doc: Document; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast()
+  const { settings } = useApp()
+  const [lang, setLang] = useState(doc.language || settings?.ocr_language || 'eng')
+  const [mode, setMode] = useState<'skip' | 'redo' | 'force'>('redo')
+  const installed = settings?.tools.languages || []
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try { await api.post(`${V1}/documents/${doc.id}/reprocess`, { mode, language: lang.trim() === (settings?.ocr_language || '') ? '' : lang.trim() }); toast('Queued for OCR'); onDone() } catch (err) { toast((err as Error).message, 'err') }
+  }
+  return (
+    <Modal title="Run OCR again" onClose={onClose}>
+      <form onSubmit={go} className="grid" style={{ gap: 14 }}>
+        <Field label="Languages for this document" help={<>Tesseract codes joined with +. Installed: {installed.join(', ')}. Saved on the document; empty or the box default = the box default.</>}><input value={lang} onChange={e => setLang(e.target.value)} className="mono" /></Field>
+        <div className="row wrap">{installed.map(l => <button key={l} type="button" className={`chip ${lang.split('+').includes(l) ? 'active' : ''}`} onClick={() => setLang(v => v.split('+').filter(Boolean).includes(l) ? v.split('+').filter(x => x && x !== l).join('+') : [...v.split('+').filter(Boolean), l].join('+'))}>{l}</button>)}</div>
+        <Field label="Mode" group help={{ skip: 'Only pages without text.', redo: 'Redo scanned pages, keep real text.', force: 'Rasterise everything and OCR it all (replaces the text layer).' }[mode]}><Segmented value={mode} onChange={setMode} options={[{ value: 'skip', label: 'Skip text' }, { value: 'redo', label: 'Redo' }, { value: 'force', label: 'Force' }]} size="sm" /></Field>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Run OCR</button></div>
+      </form>
+    </Modal>
+  )
+}
+
+function PageImages({ doc, selected = [], onToggle }: { doc: Document; selected?: number[]; onToggle?: (n: number) => void }) {
   const n = Math.max(1, doc.page_count || 1)
   const [shown, setShown] = useState(Math.min(n, 3))
   const ref = useRef<HTMLDivElement>(null)
@@ -200,7 +327,7 @@ function PageImages({ doc }: { doc: Document }) {
     io.observe(el)
     return () => io.disconnect()
   }, [shown, n])
-  return <div className="pages-view">{Array.from({ length: shown }, (_, i) => <img key={i} src={`${V1}/documents/${doc.id}/pages/${i + 1}.jpg?v=${encodeURIComponent(doc.modified_at)}`} alt={`Page ${i + 1}`} loading="lazy" />)}{shown < n && <div ref={ref} className="muted small center">Loading more pages…</div>}</div>
+  return <div className="pages-view">{Array.from({ length: shown }, (_, i) => <div key={i} className={`page-wrap ${selected.includes(i + 1) ? 'sel' : ''}`}><img src={`${V1}/documents/${doc.id}/pages/${i + 1}.jpg?v=${encodeURIComponent(doc.modified_at)}`} alt={`Page ${i + 1}`} loading="lazy" onClick={() => onToggle?.(i + 1)} /><span className="pn" onClick={() => onToggle?.(i + 1)}>{selected.includes(i + 1) ? '✓ ' : ''}{i + 1}</span></div>)}{shown < n && <div ref={ref} className="muted small center">Loading more pages…</div>}</div>
 }
 
 function FieldsEditor({ fields, values, onChange }: { fields: CustomField[]; values: FieldValue[]; onChange: (v: FieldValue[]) => void }) {

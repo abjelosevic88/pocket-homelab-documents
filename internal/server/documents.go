@@ -89,6 +89,7 @@ func (s *Server) listFilter(r *http.Request) (store.DocFilter, search.Parsed) {
 	f.Mime = firstNonEmpty(q.Get("mime"), p.Mime)
 	f.TitleContains = firstNonEmpty(q.Get("title"), p.Title)
 	f.Trash = queryBool(r, "trash")
+	f.SharedWithMe = queryBool(r, "shared")
 	f.IDs = ints("ids")
 	f.Fields = map[int64]string{}
 	for name, v := range p.Fields {
@@ -145,12 +146,15 @@ func (s *Server) handleNextASN(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 	ctx, uid := r.Context(), me(r)
-	d, err := s.store.GetDocument(ctx, uid, idParam(r, "id"), true)
+	d, _, err := s.docAccess(r, idParam(r, "id"), true)
 	if err != nil {
 		s.fail(w, err, "document")
 		return
 	}
-	prev, next := s.store.Neighbours(ctx, uid, d.ID)
+	prev, next := int64(0), int64(0)
+	if d.UserID == uid {
+		prev, next = s.store.Neighbours(ctx, uid, d.ID)
+	}
 	out := map[string]any{"document": d, "prev": prev, "next": next}
 	if d.Status == "processing" || d.Status == "pending" {
 		if jid, ok := s.processing.Load(d.ID); ok {
@@ -223,6 +227,12 @@ func normalizeDate(v string) string {
 
 func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 	ctx, uid, id := r.Context(), me(r), idParam(r, "id")
+	if d := s.docForEdit(w, r, false); d == nil {
+		return
+	} else if d.UserID != uid {
+		// an editor of a shared document changes the owner's document
+		uid = d.UserID
+	}
 	var in documentIn
 	keys, err := decodeKeys(r, &in)
 	if err != nil {
@@ -245,6 +255,9 @@ func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.fail(w, err, "document")
 		return
+	}
+	if d.UserID != me(r) {
+		d.Access = s.store.SharedLevel(ctx, d.ID, me(r))
 	}
 	writeJSON(w, http.StatusOK, d)
 }
@@ -330,15 +343,6 @@ func (s *Server) handlePurgeDocument(w http.ResponseWriter, r *http.Request) {
 
 // ---- files ----
 
-func (s *Server) docForFile(w http.ResponseWriter, r *http.Request) *store.Document {
-	d, err := s.store.GetDocument(r.Context(), me(r), idParam(r, "id"), false)
-	if err != nil {
-		s.fail(w, err, "document")
-		return nil
-	}
-	return d
-}
-
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	d := s.docForFile(w, r)
 	if d == nil {
@@ -407,7 +411,7 @@ func (s *Server) handlePageImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleText(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.GetDocument(r.Context(), me(r), idParam(r, "id"), true)
+	d, _, err := s.docAccess(r, idParam(r, "id"), true)
 	if err != nil {
 		s.fail(w, err, "document")
 		return
@@ -424,10 +428,14 @@ func (s *Server) handleReprocess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Mode  string `json:"mode"` // skip | redo | force | "" = settings
-		Force bool   `json:"force_text"`
+		Mode     string `json:"mode"` // skip | redo | force | "" = settings
+		Force    bool   `json:"force_text"`
+		Language string `json:"language"` // tesseract codes joined with +; "" = the box default; saved on the document
 	}
 	_ = decode(r, &in)
+	if lang := strings.Trim(strings.ToLower(strings.ReplaceAll(in.Language, " ", "")), "+"); lang != d.Language && (lang != "" || in.Language != "") {
+		_, _ = s.store.UpdateDocument(ctx, uid, id, store.DocChanges{Language: &lang})
+	}
 	j, err := s.enqueueProcess(ctx, d, "reprocess", map[string]any{"mode": in.Mode, "force_text": in.Force, "actor": actorName(r)})
 	if err != nil {
 		s.fail(w, err, "queue")
@@ -534,13 +542,13 @@ func (s *Server) suggestFor(ctx contextT, uid int64, d *store.Document) suggesti
 }
 
 func (s *Server) handleSuggestions(w http.ResponseWriter, r *http.Request) {
-	ctx, uid := r.Context(), me(r)
-	d, err := s.store.GetDocument(ctx, uid, idParam(r, "id"), true)
+	ctx := r.Context()
+	d, _, err := s.docAccess(r, idParam(r, "id"), true)
 	if err != nil {
 		s.fail(w, err, "document")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.suggestFor(ctx, uid, d))
+	writeJSON(w, http.StatusOK, s.suggestFor(ctx, d.UserID, d))
 }
 
 // handleApplySuggestions assigns everything suggested that is not set yet.
@@ -605,7 +613,7 @@ func (s *Server) handleListNotes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddNote(w http.ResponseWriter, r *http.Request) {
-	d := s.docForFile(w, r)
+	d := s.docForEdit(w, r, false)
 	if d == nil {
 		return
 	}
@@ -627,7 +635,7 @@ func (s *Server) handleAddNote(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteNote(w http.ResponseWriter, r *http.Request) {
-	d := s.docForFile(w, r)
+	d := s.docForEdit(w, r, false)
 	if d == nil {
 		return
 	}

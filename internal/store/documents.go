@@ -45,6 +45,7 @@ type DocFilter struct {
 	IDs             []int64
 	TitleContains   string
 	Trash           bool // the deleted ones instead of the live ones
+	SharedWithMe    bool // documents other accounts shared with UserID, instead of my own
 
 	Sort   string // created | -created | added | title | asn | modified | size | pages | correspondent | type | rank
 	Limit  int
@@ -554,6 +555,10 @@ func (s *Store) IndexDocument(ctx context.Context, id int64) error {
 		}
 		rows.Close()
 	}
+	// Serbian Cyrillic text gets a Latin twin in the index so a query in either alphabet finds it
+	if HasCyrillic(content) || HasCyrillic(title) {
+		extra = append(extra, CyrToLat(title), CyrToLat(content))
+	}
 	if _, err := s.DB.ExecContext(ctx, `INSERT INTO documents_fts (rowid, title, content, extra, notes) VALUES (?, ?, ?, ?, ?)`, id, title, content, strings.Join(extra, "\n"), strings.Join(notes, "\n")); err != nil {
 		return err
 	}
@@ -634,6 +639,9 @@ var sortCols = map[string]string{
 func (f DocFilter) where() (string, []any, string, []any) {
 	w := []string{"d.user_id = ?"}
 	args := []any{f.UserID}
+	if f.SharedWithMe {
+		w = []string{"d.id IN (SELECT document_id FROM document_shares WHERE user_id = ?)"}
+	}
 	if f.Trash {
 		w = append(w, "d.deleted_at IS NOT NULL")
 	} else {
@@ -858,6 +866,9 @@ func (s *Store) listOnce(ctx context.Context, f DocFilter, trigram bool) ([]Docu
 		ptrs = append(ptrs, &out[i])
 	}
 	s.fillRelations(ctx, ptrs)
+	if f.SharedWithMe {
+		s.fillShared(ctx, ptrs, f.UserID)
+	}
 	return out, total, rows.Err()
 }
 

@@ -23,6 +23,7 @@ type Tools struct {
 	PDFInfo   bool              `json:"pdfinfo"`
 	QPDF      bool              `json:"qpdf"`
 	Unpaper   bool              `json:"unpaper"`
+	ZBar      bool              `json:"zbar"`
 	Languages []string          `json:"languages"` // tesseract language codes installed
 	Gotenberg bool              `json:"gotenberg"`
 	Versions  map[string]string `json:"versions"`
@@ -46,7 +47,7 @@ func Detect(ctx context.Context, gotenbergURL string) *Tools {
 		_, err := exec.LookPath(name)
 		return err == nil
 	}
-	t.OCRmyPDF, t.Tesseract, t.PDFToText, t.PDFToPPM, t.PDFInfo, t.QPDF, t.Unpaper = has("ocrmypdf"), has("tesseract"), has("pdftotext"), has("pdftoppm"), has("pdfinfo"), has("qpdf"), has("unpaper")
+	t.OCRmyPDF, t.Tesseract, t.PDFToText, t.PDFToPPM, t.PDFInfo, t.QPDF, t.Unpaper, t.ZBar = has("ocrmypdf"), has("tesseract"), has("pdftotext"), has("pdftoppm"), has("pdfinfo"), has("qpdf"), has("unpaper"), has("zbarimg")
 	ver := func(name string, args ...string) string {
 		c, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
@@ -79,6 +80,13 @@ func Detect(ctx context.Context, gotenbergURL string) *Tools {
 	t.Gotenberg = gotenbergURL != ""
 	toolsCached = t
 	return t
+}
+
+// ResetCache makes the next Detect look again (after a language was installed).
+func ResetCache() {
+	toolsMu.Lock()
+	toolsCached = nil
+	toolsMu.Unlock()
 }
 
 // CanOCR reports whether scans can be OCR'd at all.

@@ -144,6 +144,10 @@ type Document struct {
 	// Filled by list for the cards
 	CorrespondentName string `json:"correspondent_name,omitempty"`
 	DocumentTypeName  string `json:"document_type_name,omitempty"`
+	// Filled for documents another account shared
+	Access     string   `json:"access,omitempty"` // owner | view | edit
+	OwnerName  string   `json:"owner_name,omitempty"`
+	SharedTags []string `json:"shared_tags,omitempty"`
 }
 
 // Note is a remark a person wrote on a document.
@@ -219,6 +223,11 @@ type RuleFilters struct {
 	Correspondent *int64  `json:"correspondent"` // already assigned this correspondent
 	DocumentType  *int64  `json:"document_type"` //
 	Tags          []int64 `json:"tags"`          // has every one of these
+	// Scheduled rules (trigger "scheduled"): fire once per document when
+	// today is ScheduleOffsetDays after (negative: before) the date in
+	// ScheduleField: "created", "added" or "cf:<custom field id>" (a date field).
+	ScheduleField      string `json:"schedule_field"`
+	ScheduleOffsetDays int    `json:"schedule_offset_days"`
 }
 
 // RuleActions are what a matching rule does.
@@ -232,6 +241,8 @@ type RuleActions struct {
 	Fields        map[string]string `json:"fields"` // field id → value
 	Favorite      *bool             `json:"favorite"`
 	SkipMatching  bool              `json:"skip_matching"` // don't run the tag/correspondent matchers after this
+	Notify        bool              `json:"notify"`        // send a message (Settings → Integrations → Notifications)
+	NotifyMessage string            `json:"notify_message"`
 }
 
 // Share is a public link to a document.
@@ -262,6 +273,13 @@ type Settings struct {
 	OCROutputType        string `json:"ocr_output_type"`
 	TrashDays            int    `json:"trash_days"`
 	ConsumeSubdirsAsTags bool   `json:"consume_subdirs_as_tags"`
+	// Barcodes (box-wide): an ASN label sets the archive serial number; a
+	// separator sheet splits a batch scan into documents.
+	BarcodesEnabled  bool   `json:"barcodes_enabled"`
+	BarcodeASNPrefix string `json:"barcode_asn_prefix"`
+	BarcodeSeparator string `json:"barcode_separator"`
+	BarcodeKeepSep   bool   `json:"barcode_keep_separator"` // keep the separator page in the next document
+	BarcodeMaxPages  int    `json:"barcode_max_pages"`
 
 	// The person's documents folder: a readable copy of the archive laid out
 	// by storage path, on this server, a WebDAV server or their Nextcloud,
@@ -284,6 +302,7 @@ type Settings struct {
 	DefaultSort   string `json:"default_sort"`
 	TitleFromName bool   `json:"title_from_name"` // new documents take the file name as title
 	DateFromText  bool   `json:"date_from_text"`  // the created date is read from the text when found
+	DateFromName  bool   `json:"date_from_name"`  // … or from the file name (2026-03-14_invoice.pdf) first
 	SuggestOnOpen bool   `json:"suggest_on_open"` // show suggestions on the document page
 	MoneyMode     string `json:"money_mode"`      // core | direct | off
 	MoneyURL      string `json:"money_url"`
