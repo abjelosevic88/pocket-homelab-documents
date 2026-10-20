@@ -39,10 +39,10 @@ var Known = map[string]string{
 
 var langCode = regexp.MustCompile(`^[a-z]{3}(_[a-z]+)?$`)
 
-const systemTessdata = "/usr/share/tessdata"
+var systemTessdata = "/usr/share/tessdata"
 
-// PrepareTessdata links the system packs into dir and points Tesseract at
-// it. Returns the directory in use ("" when the system folder is used as is).
+// PrepareTessdata links the system packs (and Tesseract's configs) into dir
+// and points Tesseract at it. Returns the directory in use ("" when the system folder is used as is).
 func PrepareTessdata(dir string) string {
 	if dir == "" {
 		return ""
@@ -54,9 +54,12 @@ func PrepareTessdata(dir string) string {
 	if v := os.Getenv("TESSDATA_PREFIX"); v != "" && v != dir {
 		sys = v
 	}
+	// Everything is linked, not only the language files: Tesseract also reads
+	// configs/ (the hocr and txt output configs OCRmyPDF asks for), tessconfigs/
+	// and pdf.ttf from the same folder, and fails without a word when they are missing.
 	if entries, err := os.ReadDir(sys); err == nil {
 		for _, e := range entries {
-			if !strings.HasSuffix(e.Name(), ".traineddata") {
+			if strings.HasPrefix(e.Name(), ".") {
 				continue
 			}
 			dst := filepath.Join(dir, e.Name())
