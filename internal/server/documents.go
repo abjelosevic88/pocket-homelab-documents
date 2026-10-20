@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"path/filepath"
 
@@ -270,7 +271,27 @@ func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 
 // applyChanges saves, records history, re-mirrors, retrains and publishes.
 func (s *Server) applyChanges(ctx contextT, uid, id int64, c store.DocChanges, actor, action string) error {
-	changed, err := s.store.UpdateDocument(ctx, uid, id, c)
+	before, err := s.store.GetDocument(ctx, uid, id, false)
+	if err != nil {
+		return err
+	}
+	if c.Title != nil {
+		before.Title = *c.Title
+	}
+	extra := map[string]any{"actor": actor}
+	hook := s.documentEvent(ctx, uid, "documents.updated", before, extra)
+	changed, err := s.store.UpdateDocument(ctx, uid, id, c, func(tx *sql.Tx, changes map[string][2]any) error {
+		fields := make([]string, 0, len(changes))
+		for k := range changes {
+			fields = append(fields, k)
+		}
+		sort.Strings(fields)
+		extra["fields"] = fields
+		if hook != nil {
+			return hook(tx)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -283,12 +304,6 @@ func (s *Server) applyChanges(ctx contextT, uid, id int64, c store.DocChanges, a
 		if _, ok := changed["content"]; !ok {
 			_ = s.placeInFolder(ctx, d)
 		}
-		fields := make([]string, 0, len(changed))
-		for k := range changed {
-			fields = append(fields, k)
-		}
-		sort.Strings(fields)
-		s.publish(uid, "documents.updated", "document:"+strconv.FormatInt(id, 10), map[string]any{"id": id, "title": d.Title, "fields": fields, "actor": actor})
 		if action == "updated" {
 			s.runRules(ctx, d, "updated", actor)
 		}
@@ -303,14 +318,13 @@ func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "document")
 		return
 	}
-	if err := s.store.SoftDeleteDocument(ctx, uid, id); err != nil {
+	if err := s.store.SoftDeleteDocument(ctx, uid, id, s.documentEvent(ctx, uid, "documents.deleted", d, nil)); err != nil {
 		s.fail(w, err, "delete document")
 		return
 	}
 	s.unplace(ctx, d)
 	s.store.AddHistory(ctx, id, uid, actorName(r), "deleted", nil)
 	s.classifiers.Invalidate(uid)
-	s.publish(uid, "documents.deleted", "document:"+strconv.FormatInt(id, 10), map[string]any{"id": id, "title": d.Title})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -797,10 +811,9 @@ func (s *Server) handleBulk(w http.ResponseWriter, r *http.Request) {
 		case "delete":
 			var d *store.Document
 			if d, err = s.store.GetDocument(ctx, uid, id, false); err == nil {
-				if err = s.store.SoftDeleteDocument(ctx, uid, id); err == nil {
+				if err = s.store.SoftDeleteDocument(ctx, uid, id, s.documentEvent(ctx, uid, "documents.deleted", d, nil)); err == nil {
 					s.unplace(ctx, d)
 					s.store.AddHistory(ctx, id, uid, actor, "deleted", nil)
-					s.publish(uid, "documents.deleted", "document:"+strconv.FormatInt(id, 10), map[string]any{"id": id, "title": d.Title})
 				}
 			}
 		case "restore":

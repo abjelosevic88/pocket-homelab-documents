@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"sort"
 	"strconv"
 	"strings"
@@ -157,7 +158,30 @@ func (s *Store) fillRelations(ctx context.Context, docs []*Document) {
 
 // CreateDocument inserts a document with its tags and fields. The caller has
 // stored the file already.
-func (s *Store) CreateDocument(ctx context.Context, d *Document) error {
+func (s *Store) CreateDocument(ctx context.Context, d *Document, after ...core.CommitHook) error {
+	_, err := s.CreateDocumentOperation(ctx, d, nil, true, 0, after...)
+	return err
+}
+
+func (s *Store) ReserveDocumentID(ctx context.Context) (int64, error) {
+	var id int64
+	err := s.DB.QueryRowContext(ctx, `UPDATE document_sequence SET value=MAX(value,(SELECT COALESCE(MAX(id),0) FROM documents))+1 WHERE singleton=1 RETURNING value`).Scan(&id)
+	return id, err
+}
+
+type DuplicateDocument struct{ ID int64 }
+
+func (e *DuplicateDocument) Error() string { return fmt.Sprintf("duplicate document %d", e.ID) }
+
+func (s *Store) CreateDocumentOperation(ctx context.Context, d *Document, op *core.Operation, allowDup bool, reservedID int64, after ...core.CommitHook) (bool, error) {
+	if reservedID == 0 {
+		var err error
+		reservedID, err = s.ReserveDocumentID(ctx)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	if strings.TrimSpace(d.Title) == "" {
 		d.Title = strings.TrimSuffix(d.OriginalName, "."+d.OriginalExt)
 		if d.Title == "" {
@@ -175,41 +199,79 @@ func (s *Store) CreateDocument(ctx context.Context, d *Document) error {
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `INSERT INTO documents (user_id, title, content, correspondent_id, document_type_id, storage_path_id, asn, created, original_name, original_ext, mime, checksum, size, status, source, favorite, language, external_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.UserID, d.Title, d.Content, d.CorrespondentID, d.DocumentTypeID, d.StoragePathID, d.ASN, d.Created, d.OriginalName, d.OriginalExt, d.Mime, d.Checksum, d.Size, d.Status, d.Source, boolInt(d.Favorite), d.Language, d.ExternalID)
+	var replayID int64
+	if ok, err := op.Replay(ctx, tx, &replayID); err != nil {
+		return false, err
+	} else if ok {
+		var id int64
+		if err = tx.QueryRowContext(ctx, `SELECT id FROM documents WHERE id=? AND user_id=? AND deleted_at IS NULL`, replayID, d.UserID).Scan(&id); err != nil {
+			return false, notFound(err)
+		}
+		d.ID = id
+		return true, nil
+	}
+	if d.ExternalID != "" {
+		var id int64
+		err := tx.QueryRowContext(ctx, `SELECT id FROM documents WHERE user_id=? AND external_id=? LIMIT 1`, d.UserID, d.ExternalID).Scan(&id)
+		if err == nil {
+			return false, core.ErrOperationConflict
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
+	}
+	if !allowDup {
+		var id int64
+		err := tx.QueryRowContext(ctx, `SELECT id FROM documents WHERE user_id=? AND checksum=? AND deleted_at IS NULL LIMIT 1`, d.UserID, d.Checksum).Scan(&id)
+		if err == nil {
+			return false, &DuplicateDocument{ID: id}
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
+	}
+
+	res, err := tx.ExecContext(ctx, `INSERT INTO documents (id,user_id, title, content, correspondent_id, document_type_id, storage_path_id, asn, created, original_name, original_ext, mime, checksum, size, status, source, favorite, language, external_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		reservedID, d.UserID, d.Title, d.Content, d.CorrespondentID, d.DocumentTypeID, d.StoragePathID, d.ASN, d.Created, d.OriginalName, d.OriginalExt, d.Mime, d.Checksum, d.Size, d.Status, d.Source, boolInt(d.Favorite), d.Language, d.ExternalID)
 	if err != nil {
-		return conflict(err)
+		return false, conflict(err)
 	}
 	d.ID, _ = res.LastInsertId()
 	if d.AddedAt != "" {
 		if t, err := time.Parse(time.RFC3339Nano, d.AddedAt); err == nil && t.Before(time.Now()) {
 			if _, err := tx.ExecContext(ctx, `UPDATE documents SET added_at = ? WHERE id = ?`, t.UTC().Format(time.RFC3339Nano), d.ID); err != nil {
-				return err
+				return false, err
 			}
 		}
 	}
 	for _, t := range d.Tags {
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO document_tags (document_id, tag_id) SELECT ?, id FROM tags WHERE id = ? AND user_id = ?`, d.ID, t, d.UserID); err != nil {
-			return err
+			return false, err
 		}
 	}
 	for _, f := range d.Fields {
 		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO document_fields (document_id, field_id, value) SELECT ?, id, ? FROM custom_fields WHERE id = ? AND user_id = ?`, d.ID, f.Value, f.FieldID, d.UserID); err != nil {
-			return err
+			return false, err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return err
+	if err := indexDocument(ctx, tx, d.ID); err != nil {
+		return false, err
+	}
+	if err := op.Save(ctx, tx, d.ID); err != nil {
+		return false, err
+	}
+	if err := core.Commit(tx, after...); err != nil {
+		return false, err
 	}
 	if d.AddedAt == "" {
 		d.AddedAt = Now()
 	}
 	d.ModifiedAt = Now()
-	return s.IndexDocument(ctx, d.ID)
+	return false, nil
 }
 
 // DocChanges is what a save may change; nil pointers leave a column alone.
@@ -235,7 +297,7 @@ type DocChanges struct {
 
 // UpdateDocument applies changes and returns what actually changed as
 // {field: [old, new]} for the history.
-func (s *Store) UpdateDocument(ctx context.Context, userID, id int64, c DocChanges) (map[string][2]any, error) {
+func (s *Store) UpdateDocument(ctx context.Context, userID, id int64, c DocChanges, after ...func(*sql.Tx, map[string][2]any) error) (map[string][2]any, error) {
 	cur, err := s.GetDocument(ctx, userID, id, c.Content != nil)
 	if err != nil {
 		return nil, err
@@ -368,10 +430,20 @@ func (s *Store) UpdateDocument(ctx context.Context, userID, id int64, c DocChang
 	if _, err := tx.ExecContext(ctx, `UPDATE documents SET `+strings.Join(set, ", ")+` WHERE id = ? AND user_id = ?`, args...); err != nil {
 		return nil, conflict(err)
 	}
+	if err := indexDocument(ctx, tx, id); err != nil {
+		return nil, err
+	}
+	for _, hook := range after {
+		if hook != nil {
+			if err := hook(tx, changed); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return changed, s.IndexDocument(ctx, id)
+	return changed, nil
 }
 
 // SetProcessed stores what the worker found. Content is kept when a person
@@ -379,7 +451,7 @@ func (s *Store) UpdateDocument(ctx context.Context, userID, id int64, c DocChang
 func (s *Store) SetProcessed(ctx context.Context, id int64, content string, pageCount int, hasArchive bool, archiveChecksum string, archiveSize int64, hasThumb bool, lang string, force bool) error {
 	var edited int
 	_ = s.DB.QueryRowContext(ctx, `SELECT content_edited FROM documents WHERE id = ?`, id).Scan(&edited)
-	q := `UPDATE documents SET status = 'done', status_message = '', page_count = ?, has_archive = ?, archive_checksum = ?, archive_size = ?, has_thumb = ?, language = CASE WHEN ? = '' THEN language ELSE ? END, modified_at = ?`
+	q := `UPDATE documents SET status = 'processing', status_message = '', page_count = ?, has_archive = ?, archive_checksum = ?, archive_size = ?, has_thumb = ?, language = CASE WHEN ? = '' THEN language ELSE ? END, modified_at = ?`
 	args := []any{pageCount, boolInt(hasArchive), archiveChecksum, archiveSize, boolInt(hasThumb), lang, lang, Now()}
 	if edited == 0 || force {
 		q += `, content = ?, content_edited = 0`
@@ -394,9 +466,20 @@ func (s *Store) SetProcessed(ctx context.Context, id int64, content string, page
 }
 
 // SetStatus moves a document between pending / processing / failed.
-func (s *Store) SetStatus(ctx context.Context, id int64, status, msg string) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE documents SET status = ?, status_message = ? WHERE id = ?`, status, msg, id)
-	return err
+func (s *Store) SetStatus(ctx context.Context, id int64, status, msg string, after ...core.CommitHook) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE documents SET status = ?, status_message = ? WHERE id = ?`, status, msg, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return core.Commit(tx, after...)
 }
 
 // SetMirrorPath remembers where the mirror folder holds a document.
@@ -425,16 +508,26 @@ func (s *Store) SetDetected(ctx context.Context, id int64, title, created string
 }
 
 // SoftDeleteDocument moves a document to the trash.
-func (s *Store) SoftDeleteDocument(ctx context.Context, userID, id int64) error {
-	res, err := s.DB.ExecContext(ctx, `UPDATE documents SET deleted_at = ?, modified_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL`, Now(), Now(), id, userID)
+func (s *Store) SoftDeleteDocument(ctx context.Context, userID, id int64, after ...core.CommitHook) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE documents SET deleted_at = ?, modified_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL`, Now(), Now(), id, userID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	_, _ = s.DB.ExecContext(ctx, `DELETE FROM shares WHERE document_id = ?`, id)
-	return s.IndexDocument(ctx, id)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM shares WHERE document_id = ?`, id); err != nil {
+		return err
+	}
+	if err := indexDocument(ctx, tx, id); err != nil {
+		return err
+	}
+	return core.Commit(tx, after...)
 }
 
 // RestoreDocument brings a document back from the trash.
@@ -515,18 +608,28 @@ func (s *Store) NextASN(ctx context.Context, userID int64) int64 {
 // IndexDocument rebuilds the search rows of one document. Deleted documents
 // are taken out of the index.
 func (s *Store) IndexDocument(ctx context.Context, id int64) error {
+	return indexDocument(ctx, s.DB, id)
+}
+
+type documentSQL interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func indexDocument(ctx context.Context, db documentSQL, id int64) error {
 	var userID int64
 	var title, content, origName string
 	var corr, typ, path sql.NullInt64
 	var asn sql.NullInt64
 	var deleted sql.NullString
-	err := s.DB.QueryRowContext(ctx, `SELECT user_id, title, content, original_name, correspondent_id, document_type_id, storage_path_id, asn, deleted_at FROM documents WHERE id = ?`, id).
+	err := db.QueryRowContext(ctx, `SELECT user_id, title, content, original_name, correspondent_id, document_type_id, storage_path_id, asn, deleted_at FROM documents WHERE id = ?`, id).
 		Scan(&userID, &title, &content, &origName, &corr, &typ, &path, &asn, &deleted)
 	if err != nil {
 		return notFound(err)
 	}
-	_, _ = s.DB.ExecContext(ctx, `DELETE FROM documents_fts WHERE rowid = ?`, id)
-	_, _ = s.DB.ExecContext(ctx, `DELETE FROM documents_trigram WHERE rowid = ?`, id)
+	_, _ = db.ExecContext(ctx, `DELETE FROM documents_fts WHERE rowid = ?`, id)
+	_, _ = db.ExecContext(ctx, `DELETE FROM documents_trigram WHERE rowid = ?`, id)
 	if deleted.Valid {
 		return nil
 	}
@@ -540,14 +643,14 @@ func (s *Store) IndexDocument(ctx context.Context, id int64) error {
 			return
 		}
 		var name string
-		if s.DB.QueryRowContext(ctx, `SELECT name FROM `+table+` WHERE id = ?`, idv.Int64).Scan(&name) == nil {
+		if db.QueryRowContext(ctx, `SELECT name FROM `+table+` WHERE id = ?`, idv.Int64).Scan(&name) == nil {
 			extra = append(extra, name)
 		}
 	}
 	one("correspondents", corr)
 	one("document_types", typ)
 	one("storage_paths", path)
-	if rows, err := s.DB.QueryContext(ctx, `SELECT t.name FROM document_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.document_id = ?`, id); err == nil {
+	if rows, err := db.QueryContext(ctx, `SELECT t.name FROM document_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.document_id = ?`, id); err == nil {
 		for rows.Next() {
 			var n string
 			if rows.Scan(&n) == nil {
@@ -556,7 +659,7 @@ func (s *Store) IndexDocument(ctx context.Context, id int64) error {
 		}
 		rows.Close()
 	}
-	if rows, err := s.DB.QueryContext(ctx, `SELECT f.name, df.value FROM document_fields df JOIN custom_fields f ON f.id = df.field_id WHERE df.document_id = ?`, id); err == nil {
+	if rows, err := db.QueryContext(ctx, `SELECT f.name, df.value FROM document_fields df JOIN custom_fields f ON f.id = df.field_id WHERE df.document_id = ?`, id); err == nil {
 		for rows.Next() {
 			var n, v string
 			if rows.Scan(&n, &v) == nil {
@@ -566,7 +669,7 @@ func (s *Store) IndexDocument(ctx context.Context, id int64) error {
 		rows.Close()
 	}
 	var notes []string
-	if rows, err := s.DB.QueryContext(ctx, `SELECT text FROM notes WHERE document_id = ?`, id); err == nil {
+	if rows, err := db.QueryContext(ctx, `SELECT text FROM notes WHERE document_id = ?`, id); err == nil {
 		for rows.Next() {
 			var t string
 			if rows.Scan(&t) == nil {
@@ -579,10 +682,10 @@ func (s *Store) IndexDocument(ctx context.Context, id int64) error {
 	if HasCyrillic(content) || HasCyrillic(title) {
 		extra = append(extra, CyrToLat(title), CyrToLat(content))
 	}
-	if _, err := s.DB.ExecContext(ctx, `INSERT INTO documents_fts (rowid, title, content, extra, notes) VALUES (?, ?, ?, ?, ?)`, id, title, content, strings.Join(extra, "\n"), strings.Join(notes, "\n")); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO documents_fts (rowid, title, content, extra, notes) VALUES (?, ?, ?, ?, ?)`, id, title, content, strings.Join(extra, "\n"), strings.Join(notes, "\n")); err != nil {
 		return err
 	}
-	_, err = s.DB.ExecContext(ctx, `INSERT INTO documents_trigram (rowid, title, content) VALUES (?, ?, ?)`, id, title, content)
+	_, err = db.ExecContext(ctx, `INSERT INTO documents_trigram (rowid, title, content) VALUES (?, ?, ?)`, id, title, content)
 	return err
 }
 

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 )
 
 // Version is an earlier file of a document.
@@ -83,12 +84,20 @@ type DocShare struct {
 }
 
 // ShareDocument grants (or changes) another account's access.
-func (s *Store) ShareDocument(ctx context.Context, documentID, userID, by int64, level string) error {
+func (s *Store) ShareDocument(ctx context.Context, documentID, userID, by int64, level string, after ...core.CommitHook) error {
 	if level != "edit" {
 		level = "view"
 	}
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO document_shares (document_id, user_id, level, shared_by) VALUES (?, ?, ?, ?) ON CONFLICT(document_id, user_id) DO UPDATE SET level = excluded.level`, documentID, userID, level, by)
-	return err
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `INSERT INTO document_shares (document_id, user_id, level, shared_by) VALUES (?, ?, ?, ?) ON CONFLICT(document_id, user_id) DO UPDATE SET level = excluded.level`, documentID, userID, level, by)
+	if err != nil {
+		return err
+	}
+	return core.Commit(tx, after...)
 }
 
 // UnshareDocument takes the access back.

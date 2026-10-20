@@ -173,9 +173,10 @@ func (s *Server) processJob(ctx context.Context, j *store.Job) error {
 	s.store.JobProgress(ctx, j.ID, "OCR running", "")
 	res, err := ocr.Process(ctx, tools, src, s.archivePath(d.ID), s.thumbPath(d.ID), opts)
 	if err != nil {
-		_ = s.store.SetStatus(ctx, d.ID, "failed", err.Error())
+		if commitErr := s.completeProcessing(ctx, j, d, "failed", err.Error(), "documents.failed", map[string]any{"error": err.Error()}); commitErr != nil {
+			return commitErr
+		}
 		s.store.AddHistory(ctx, d.ID, d.UserID, "worker", "failed", map[string]any{"error": err.Error()})
-		s.publish(d.UserID, "documents.failed", "document:"+strconv.FormatInt(d.ID, 10), map[string]any{"id": d.ID, "title": d.Title, "error": err.Error()})
 		s.notifyFailure(ctx, d, err.Error())
 		return err
 	}
@@ -223,8 +224,7 @@ func (s *Server) processJob(ctx context.Context, j *store.Job) error {
 		action = "reprocessed"
 	}
 	s.store.AddHistory(ctx, d.ID, d.UserID, "worker", action, map[string]any{"pages": res.PageCount, "characters": len(d.Content), "warnings": res.Warnings, "took": res.Took.Round(time.Millisecond).String()})
-	s.publish(d.UserID, "documents.processed", "document:"+strconv.FormatInt(d.ID, 10), map[string]any{"id": d.ID, "title": d.Title, "pages": res.PageCount, "characters": len(d.Content), "created": d.Created, "new": p.New})
-	return nil
+	return s.completeProcessing(ctx, j, d, "done", "", "documents.processed", map[string]any{"pages": res.PageCount, "characters": len(d.Content), "created": d.Created, "new": p.New})
 }
 
 // applyMatching assigns tags, correspondent, type and path by the matching

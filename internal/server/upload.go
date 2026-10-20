@@ -1,8 +1,11 @@
 package server
 
 import (
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"io"
 	"mime"
 	"net/http"
@@ -20,6 +23,8 @@ import (
 
 // incoming describes a file about to become a document.
 type incoming struct {
+	OperationKey  string
+	OperationSlot int
 	Path          string // where the bytes are now (moved into place)
 	Name          string // original file name
 	Title         string
@@ -61,23 +66,42 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 	}
 	if extract.Kind(ext) == "" {
 		os.Remove(in.Path)
-		return nil, fmt.Errorf("files of type .%s are not supported", ext)
+		return nil, fmt.Errorf("%w: files of type .%s are not supported", errInvalidUpload, ext)
 	}
 	sum, size, err := checksumOf(in.Path)
 	if err != nil {
 		return nil, err
 	}
+	fingerprint := in
+	fingerprint.Path = ""
+	fingerprint.Actor = ""
+	fingerprint.OperationKey = ""
+	fingerprint.OperationSlot = 0
+	scope := fmt.Sprintf("%d:%s:upload:%d", uid, linkAppFrom(ctx), in.OperationSlot)
+	key := in.OperationKey
 	if in.ExternalID != "" {
-		if ex, err := s.store.FindByExternalID(ctx, uid, in.ExternalID); err == nil {
-			os.Remove(in.Path)
-			return nil, &ErrDuplicate{Existing: ex}
-		}
+		scope = fmt.Sprintf("%d:document-external-id", uid)
+		key = in.ExternalID
 	}
-	if !in.AllowDup {
-		if ex, err := s.store.FindByChecksum(ctx, uid, sum); err == nil {
-			os.Remove(in.Path)
-			return nil, &ErrDuplicate{Existing: ex}
+	op, err := core.NewOperation(scope, key, struct {
+		Checksum string
+		Input    incoming
+	}{sum, fingerprint})
+	if err != nil {
+		os.Remove(in.Path)
+		return nil, fmt.Errorf("%w: %s", errInvalidUpload, err)
+	}
+	var replayID int64
+	if ok, err := op.Replay(ctx, s.store.DB, &replayID); err != nil {
+		os.Remove(in.Path)
+		return nil, err
+	} else if ok {
+		os.Remove(in.Path)
+		d, err := s.store.GetDocument(ctx, uid, replayID, true)
+		if err == nil && d.DeletedAt != nil {
+			return nil, store.ErrNotFound
 		}
+		return d, err
 	}
 	st, _ := s.store.GetSettings(ctx, uid)
 	fromName := false
@@ -108,24 +132,56 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 	if !in.SkipMatching {
 		d.Tags = append(d.Tags, s.store.InboxTagIDs(ctx, uid)...)
 	}
-	if err := s.store.CreateDocument(ctx, d); err != nil {
-		if errors.Is(err, store.ErrConflict) {
-			os.Remove(in.Path)
-			return nil, errors.New("that archive serial number is already in use")
-		}
+	// Reserve the filename independently, then durably place the bytes before
+	// making a document visible. Crashes may leave an unused file, never a row
+	// with a missing original or a filename reused by another upload.
+	d.ID, err = s.store.ReserveDocumentID(ctx)
+	if err != nil {
 		return nil, err
 	}
 	dst := s.originalPath(d)
-	if err := moveFile(in.Path, dst); err != nil {
-		_ = s.store.PurgeDocument(ctx, uid, d.ID)
+	if err = moveFileDurable(in.Path, dst); err != nil {
+		os.Remove(dst)
 		return nil, err
 	}
-	s.store.AddHistory(ctx, d.ID, uid, firstNonEmpty(in.Actor, in.Source), "added", map[string]any{"file": in.Name, "size": size, "source": d.Source})
-	s.publish(uid, "documents.added", "document:"+strconv.FormatInt(d.ID, 10), map[string]any{"id": d.ID, "title": d.Title, "file": in.Name, "source": d.Source})
-	params := map[string]any{"new": true, "detect_date": in.Created == "" && st.DateFromText, "skip_matching": in.SkipMatching, "actor": firstNonEmpty(in.Actor, in.Source)}
-	if _, err := s.enqueueProcess(ctx, d, "process", params); err != nil {
-		return d, err
+	keep := false
+	defer func() {
+		if !keep {
+			os.Remove(dst)
+		}
+	}()
+	params, err := json.Marshal(map[string]any{"new": true, "detect_date": in.Created == "" && st.DateFromText, "skip_matching": in.SkipMatching, "actor": firstNonEmpty(in.Actor, in.Source)})
+	if err != nil {
+		return nil, err
 	}
+	event := s.documentEvent(ctx, uid, "documents.added", d, map[string]any{"file": in.Name, "source": d.Source})
+	replayed, err := s.store.CreateDocumentOperation(ctx, d, op, in.AllowDup, d.ID, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO jobs(user_id,document_id,kind,params) VALUES(?,?,'process',?)`, uid, d.ID, string(params)); err != nil {
+			return err
+		}
+		if event != nil {
+			return event(tx)
+		}
+		return nil
+	})
+	if err != nil {
+		var dup *store.DuplicateDocument
+		if errors.As(err, &dup) {
+			ex, e := s.store.GetDocument(ctx, uid, dup.ID, true)
+			if e != nil {
+				return nil, e
+			}
+			return nil, &ErrDuplicate{Existing: ex}
+		}
+		return nil, err
+	}
+	if replayed {
+		return s.store.GetDocument(ctx, uid, d.ID, true)
+	}
+	keep = true
+	s.store.AddHistory(ctx, d.ID, uid, firstNonEmpty(in.Actor, in.Source), "added", map[string]any{"file": in.Name, "size": size, "source": d.Source})
+	s.nudge()
+
 	return d, nil
 }
 
@@ -181,6 +237,32 @@ func checksumOf(path string) (string, int64, error) {
 	return hashReader(f)
 }
 
+var errInvalidUpload = errors.New("invalid upload")
+
+func moveFileDurable(src, dst string) error {
+	if err := moveFile(src, dst); err != nil {
+		return err
+	}
+	f, err := os.Open(dst)
+	if err != nil {
+		return err
+	}
+	err = f.Sync()
+	closeErr := f.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	dir, err := os.Open(filepath.Dir(dst))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
+}
+
 func moveFile(src, dst string) error {
 	_ = os.MkdirAll(filepath.Dir(dst), 0o755)
 	if err := os.Rename(src, dst); err == nil {
@@ -200,6 +282,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	mt, _, _ := mime.ParseMediaType(ct)
 	var results []any
 	status := http.StatusCreated
+	failureStatus := http.StatusBadRequest
 	actor := actorName(r)
 	ingestOne := func(name string, rd io.Reader, meta map[string]string) {
 		ext := strings.TrimPrefix(filepath.Ext(name), ".")
@@ -211,7 +294,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			results = append(results, map[string]any{"file": name, "error": err.Error()})
 			return
 		}
-		in := incoming{Path: tmp, Name: name, Title: meta["title"], Created: meta["created"], Source: firstNonEmpty(meta["source"], "web"), Actor: actor, AllowDup: meta["allow_duplicates"] == "1" || meta["allow_duplicates"] == "true", ExternalID: meta["external_id"]}
+		in := incoming{OperationKey: r.Header.Get("Idempotency-Key"), OperationSlot: len(results), Path: tmp, Name: name, Title: meta["title"], Created: meta["created"], Source: firstNonEmpty(meta["source"], "web"), Actor: actor, AllowDup: meta["allow_duplicates"] == "1" || meta["allow_duplicates"] == "true", ExternalID: meta["external_id"]}
 		if meta["created"] != "" {
 			in.Created = normalizeDate(meta["created"])
 		}
@@ -247,6 +330,16 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		d, err := s.ingest(ctx, uid, in)
 		if err != nil {
+			failureStatus = http.StatusInternalServerError
+			switch {
+			case errors.Is(err, errInvalidUpload):
+				failureStatus = http.StatusBadRequest
+			case errors.Is(err, core.ErrOperationConflict), errors.Is(err, store.ErrConflict):
+				failureStatus = http.StatusConflict
+			case errors.Is(err, store.ErrNotFound):
+				failureStatus = http.StatusNotFound
+			}
+
 			var dup *ErrDuplicate
 			if errors.As(err, &dup) {
 				results = append(results, map[string]any{"file": name, "error": err.Error(), "duplicate_of": dup.Existing.ID})
@@ -329,7 +422,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if ok == 0 {
-		status = http.StatusBadRequest
+		status = failureStatus
 		if len(results) == 1 {
 			if dup, has := results[0].(map[string]any)["duplicate_of"]; has {
 				writeJSON(w, http.StatusConflict, map[string]any{"error": results[0].(map[string]any)["error"], "duplicate_of": dup})

@@ -96,12 +96,14 @@ func (s *Server) handleShareWith(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such user")
 		return
 	}
-	if err := s.store.ShareDocument(ctx, d.ID, in.UserID, uid, in.Level); err != nil {
+	if in.Level != "edit" {
+		in.Level = "view"
+	}
+	if err := s.store.ShareDocument(ctx, d.ID, in.UserID, uid, in.Level, s.documentEvent(ctx, uid, "documents.shared", d, map[string]any{"with_user_id": in.UserID, "level": in.Level})); err != nil {
 		s.fail(w, err, "share")
 		return
 	}
 	s.store.AddHistory(ctx, d.ID, uid, actorName(r), "shared_with", map[string]any{"user_id": in.UserID, "level": in.Level})
-	s.publish(uid, "documents.shared", "document:"+strconv.FormatInt(d.ID, 10), map[string]any{"id": d.ID, "title": d.Title, "with_user_id": in.UserID, "level": in.Level})
 	s.handleListDocShares(w, r)
 }
 

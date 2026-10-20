@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -1750,13 +1751,12 @@ func (s *Server) plSoftDelete(ctx context.Context, uid, id int64, actor string) 
 	if err != nil {
 		return err
 	}
-	if err := s.store.SoftDeleteDocument(ctx, uid, id); err != nil {
+	if err := s.store.SoftDeleteDocument(ctx, uid, id, s.documentEvent(ctx, uid, "documents.deleted", d, nil)); err != nil {
 		return err
 	}
 	s.unplace(ctx, d)
 	s.store.AddHistory(ctx, id, uid, actor, "deleted", nil)
 	s.classifiers.Invalidate(uid)
-	s.publish(uid, "documents.deleted", "document:"+strconv.FormatInt(id, 10), map[string]any{"id": id, "title": d.Title})
 	return nil
 }
 
@@ -1976,7 +1976,7 @@ func (s *Server) plPostDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fv := func(k string) string { return strings.TrimSpace(r.FormValue(k)) }
-	in := incoming{Path: tmp, Name: name, Title: fv("title"), Source: "api", Actor: actorName(r), Tags: plInts(r.MultipartForm.Value["tags"])}
+	in := incoming{OperationKey: r.Header.Get("Idempotency-Key"), Path: tmp, Name: name, Title: fv("title"), Source: "api", Actor: actorName(r), Tags: plInts(r.MultipartForm.Value["tags"])}
 	if v := fv("created"); v != "" {
 		in.Created = plDate(v)
 	}
@@ -1995,11 +1995,16 @@ func (s *Server) plPostDocument(w http.ResponseWriter, r *http.Request) {
 	d, err := s.ingest(ctx, uid, in)
 	if err != nil {
 		var dup *ErrDuplicate
-		if errors.As(err, &dup) {
-			plDetail(w, http.StatusConflict, err.Error())
-			return
+		status := http.StatusInternalServerError
+		switch {
+		case errors.As(err, &dup), errors.Is(err, core.ErrOperationConflict), errors.Is(err, store.ErrConflict):
+			status = http.StatusConflict
+		case errors.Is(err, store.ErrNotFound):
+			status = http.StatusNotFound
+		case errors.Is(err, errInvalidUpload):
+			status = http.StatusBadRequest
 		}
-		plDetail(w, http.StatusBadRequest, err.Error())
+		plDetail(w, status, err.Error())
 		return
 	}
 	var jobID int64

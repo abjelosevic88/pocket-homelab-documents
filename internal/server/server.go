@@ -210,24 +210,6 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 	return nil
 }
 
-// publish sends an event to Core without blocking. The payload names whose
-// document it was (user_id, user_email).
-func (s *Server) publish(userID int64, topic, subject string, payload map[string]any) {
-	if !s.core.Configured() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	payload["user_id"] = userID
-	if u, err := s.store.GetUser(ctx, userID); err == nil {
-		payload["user_email"] = u.Email
-	}
-	if err := s.core.Publish(ctx, topic, subject, payload); err != nil {
-		s.log.Warn("pocket core: outbox enqueue failed", "topic", topic, "err", err)
-	}
-}
-
-// resolveSibling asks Core where a sibling app lives (cached a minute).
 func (s *Server) resolveSibling(ctx context.Context, slug string) string {
 	if !s.core.Configured() {
 		return ""
