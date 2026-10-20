@@ -1,7 +1,12 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"path/filepath"
+
 	"errors"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 	"os"
 	"sort"
@@ -409,6 +414,50 @@ func (s *Server) handlePageImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serveFile(w, r, p, "page.jpg", "image/jpeg", false)
+}
+
+// handlePageText returns the word boxes of a page for the selectable text
+// layer over the page image; cached next to the page image.
+func (s *Server) handlePageText(w http.ResponseWriter, r *http.Request) {
+	d := s.docForFile(w, r)
+	if d == nil {
+		return
+	}
+	n, _ := strconv.Atoi(chi.URLParam(r, "n"))
+	if n < 1 || (d.PageCount > 0 && n > d.PageCount) {
+		writeErr(w, http.StatusNotFound, "no such page")
+		return
+	}
+	src := ""
+	if d.HasArchive {
+		src = s.archivePath(d.ID)
+	} else if strings.EqualFold(d.OriginalExt, "pdf") {
+		src = s.originalPath(d)
+	}
+	if src == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"width": 0, "height": 0, "lines": []any{}})
+		return
+	}
+	cache := strings.TrimSuffix(s.pagePath(d.ID, n), ".jpg") + ".words.json"
+	if b, err := os.ReadFile(cache); err == nil {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+		_, _ = w.Write(b)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	words, err := ocr.PageText(ctx, src, n)
+	if err != nil {
+		s.fail(w, err, "page text")
+		return
+	}
+	b, _ := json.Marshal(words)
+	_ = os.MkdirAll(filepath.Dir(cache), 0o755)
+	_ = os.WriteFile(cache, b, 0o644)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	_, _ = w.Write(b)
 }
 
 func (s *Server) handleText(w http.ResponseWriter, r *http.Request) {

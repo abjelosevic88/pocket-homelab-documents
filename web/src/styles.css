@@ -377,7 +377,12 @@ button.chip-tag { cursor: pointer; }
 .preview-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
 .pdf-frame { flex: 1; width: 100%; border: 0; min-height: 600px; background: #525659; }
 .pages-view { overflow: auto; padding: 12px; background: #525659; flex: 1; display: flex; flex-direction: column; gap: 12px; align-items: center; }
-.pages-view img { max-width: 100%; box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; }
+.pages-view .page-inner { position: relative; width: 100%; line-height: 0; box-shadow: 0 2px 12px rgba(0,0,0,.5); background: #fff; }
+.pages-view .page-inner img { width: 100%; display: block; user-select: none; -webkit-user-drag: none; }
+.textlayer { position: absolute; inset: 0; overflow: hidden; line-height: 1; }
+.textlayer span { position: absolute; white-space: pre; color: transparent; transform-origin: 0 0; cursor: text; font-family: sans-serif; }
+.textlayer span::selection { background: rgba(37, 99, 235, .32); color: transparent; }
+.textlayer ::selection { background: rgba(37, 99, 235, .32); }
 .image-preview { overflow: auto; padding: 12px; background: #525659; flex: 1; display: grid; place-items: center; }
 .image-preview img { max-width: 100%; }
 .text-preview { padding: 14px; overflow: auto; }
@@ -414,8 +419,8 @@ button.chip-tag { cursor: pointer; }
 .page-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface-2); font-size: 12.5px; }
 .page-tools input { width: 150px; padding: 4px 8px; font-size: 12.5px; }
 .pages-view .page-wrap { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
-.pages-view .page-wrap .pn { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 1px 7px; border-radius: 999px; cursor: pointer; user-select: none; }
-.pages-view .page-wrap.sel img { outline: 3px solid var(--accent); }
+.pages-view .page-wrap .pn { position: absolute; z-index: 2; top: 6px; left: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 1px 7px; border-radius: 999px; cursor: pointer; user-select: none; }
+.pages-view .page-wrap.sel .page-inner { outline: 3px solid var(--accent); }
 .pages-view .page-wrap.sel .pn { background: var(--accent); }
 .shared-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-hover); margin-bottom: 10px; }
 

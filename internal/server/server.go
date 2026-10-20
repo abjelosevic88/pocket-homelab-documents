@@ -355,6 +355,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/documents/{id}/preview", s.handlePreview)
 			r.Get("/documents/{id}/thumb", s.handleThumb)
 			r.Get("/documents/{id}/pages/{n}", s.handlePageImage)
+			r.Get("/documents/{id}/pages/{n}/text", s.handlePageText)
 			r.Get("/documents/{id}/text", s.handleText)
 			r.Post("/documents/{id}/reprocess", s.handleReprocess)
 			r.Get("/documents/{id}/suggestions", s.handleSuggestions)

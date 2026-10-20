@@ -202,7 +202,7 @@ export default function DocumentPage() {
             <span className="muted small">{doc.page_count > 0 && plural(doc.page_count, 'page')}</span>
           </div>
           {isOwner && (hasPDFSource || isImage) && doc.status === 'done' && <div className="page-tools">
-            {hasPDFSource && preview === 'pages' ? <span className="muted">{selPages.length ? `${selPages.length} selected` : 'Tap page numbers to select'}</span> : <span className="muted">Whole file:</span>}
+            {hasPDFSource && preview === 'pages' ? <span className="muted">{selPages.length ? `${selPages.length} selected` : 'Tap a page number to select the page'}</span> : <span className="muted">Whole file:</span>}
             <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 90, pages: selPages }, 'Rotated')}>↻ 90°</button>
             <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 270, pages: selPages }, 'Rotated')}>↺ 90°</button>
             <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 180, pages: selPages }, 'Rotated')}>180°</button>
@@ -315,6 +315,50 @@ function LanguageModal({ doc, onClose, onDone }: { doc: Document; onClose: () =>
   )
 }
 
+interface PageWords { width: number; height: number; lines: { x: number; y: number; w: number; h: number; t: string }[][] }
+
+/** Invisible, selectable words laid exactly over a page image (like a PDF viewer's text layer). */
+function TextLayer({ docId, n, version }: { docId: number; n: number; version: string }) {
+  const [words, setWords] = useState<PageWords | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    let stop = false
+    api.get<PageWords>(`${V1}/documents/${docId}/pages/${n}/text?v=${encodeURIComponent(version)}`).then(w => { if (!stop) setWords(w) }).catch(() => {})
+    return () => { stop = true }
+  }, [docId, n, version])
+  // size each word to its box: font from the box height, then stretch to the box width
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !words || !words.width) return
+    const ctx = document.createElement('canvas').getContext('2d')!
+    const fit = () => {
+      const scale = el.clientWidth / words.width
+      if (!scale) return
+      el.querySelectorAll<HTMLSpanElement>('span[data-w]').forEach(sp => {
+        const h = Number(sp.dataset.h) * scale, w = Number(sp.dataset.w) * scale
+        const fs = h * 0.92
+        sp.style.fontSize = `${fs}px`
+        ctx.font = `${fs}px sans-serif`
+        const tw = ctx.measureText(sp.dataset.t || '').width
+        sp.style.transform = tw > 0 ? `scaleX(${w / tw})` : ''
+      })
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [words])
+  if (!words || !words.width || !words.lines.length) return null
+  const pct = (v: number, of: number) => `${(v / of) * 100}%`
+  return (
+    <div className="textlayer" ref={ref}>
+      {words.lines.map((line, li) => line.map((wd, wi) => (
+        <span key={`${li}-${wi}`} data-w={wd.w} data-h={wd.h} data-t={wd.t} style={{ left: pct(wd.x, words.width), top: pct(wd.y, words.height) }}>{wd.t}{wi === line.length - 1 ? '\n' : ' '}</span>
+      )))}
+    </div>
+  )
+}
+
 function PageImages({ doc, selected = [], onToggle }: { doc: Document; selected?: number[]; onToggle?: (n: number) => void }) {
   const n = Math.max(1, doc.page_count || 1)
   const [shown, setShown] = useState(Math.min(n, 3))
@@ -327,7 +371,13 @@ function PageImages({ doc, selected = [], onToggle }: { doc: Document; selected?
     io.observe(el)
     return () => io.disconnect()
   }, [shown, n])
-  return <div className="pages-view">{Array.from({ length: shown }, (_, i) => <div key={i} className={`page-wrap ${selected.includes(i + 1) ? 'sel' : ''}`}><img src={`${V1}/documents/${doc.id}/pages/${i + 1}.jpg?v=${encodeURIComponent(doc.modified_at)}`} alt={`Page ${i + 1}`} loading="lazy" onClick={() => onToggle?.(i + 1)} /><span className="pn" onClick={() => onToggle?.(i + 1)}>{selected.includes(i + 1) ? '✓ ' : ''}{i + 1}</span></div>)}{shown < n && <div ref={ref} className="muted small center">Loading more pages…</div>}</div>
+  return <div className="pages-view">{Array.from({ length: shown }, (_, i) => <div key={i} className={`page-wrap ${selected.includes(i + 1) ? 'sel' : ''}`}>
+    <div className="page-inner">
+      <img src={`${V1}/documents/${doc.id}/pages/${i + 1}.jpg?v=${encodeURIComponent(doc.modified_at)}`} alt={`Page ${i + 1}`} loading="lazy" draggable={false} />
+      <TextLayer docId={doc.id} n={i + 1} version={doc.modified_at} />
+    </div>
+    <span className="pn" onClick={() => onToggle?.(i + 1)} title={onToggle ? 'Select this page for the page tools' : undefined}>{selected.includes(i + 1) ? '✓ ' : ''}{i + 1}</span>
+  </div>)}{shown < n && <div ref={ref} className="muted small center">Loading more pages…</div>}</div>
 }
 
 function FieldsEditor({ fields, values, onChange }: { fields: CustomField[]; values: FieldValue[]; onChange: (v: FieldValue[]) => void }) {

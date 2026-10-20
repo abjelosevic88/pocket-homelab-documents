@@ -40,7 +40,7 @@ type linkRoute struct {
 var linkRoutes = []linkRoute{
 	{"GET", regexp.MustCompile(`^/api/v1/auth/me$`), ""},
 	{"GET", regexp.MustCompile(`^/api/v1/(documents|dashboard|statistics|tags|correspondents|document_types|storage_paths|custom_fields|taxonomy|saved_views|changes)$`), "documents:read"},
-	{"GET", regexp.MustCompile(`^/api/v1/documents/\d+(/download|/preview|/thumb|/text|/notes|/history|/similar|/suggestions|/pages/\d+(\.jpg)?)?$`), "documents:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/documents/\d+(/download|/preview|/thumb|/text|/notes|/history|/similar|/suggestions|/pages/\d+(\.jpg|/text)?)?$`), "documents:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/documents/next_asn$`), "documents:read"},
 	{"POST", regexp.MustCompile(`^/api/v1/documents(/post_document)?$`), "documents:write"},
 	{"PUT PATCH", regexp.MustCompile(`^/api/v1/documents/\d+$`), "documents:write"},
