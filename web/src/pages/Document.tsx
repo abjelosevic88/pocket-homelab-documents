@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
+import { FIELD_TYPES } from '../lib/types'
 import type { Document, HistoryEntry, Job, Note, Share, Suggestions, CustomField, FieldValue, Version, DocShare } from '../lib/types'
 import { ago, bytes, fileIcon, fmtDate, money, plural, stamp } from '../lib/format'
 import { Card, Confirm, Field, Loading, Menu, Modal, Segmented, Tabs, useToast } from '../components/ui'
 import { Picker } from '../components/Picker'
 import { TagChip } from '../components/docs'
+import { Select } from '../components/Select'
 
 type Tab = 'details' | 'content' | 'notes' | 'history' | 'similar' | 'versions'
 
@@ -284,7 +286,7 @@ function ShareWithModal({ doc, users, onClose }: { doc: Document; users: { id: n
     <Modal title="Share with someone on this box" onClose={onClose}>
       <p className="muted small">They see this one document under “Shared with me”, can open and download it, and with <i>edit</i> change its details and write notes. Nothing else of yours. Tags show as names only.</p>
       <div className="row wrap mb">
-        <select value={uid} onChange={e => setUid(Number(e.target.value))} style={{ width: 'auto' }}>{users.map(u => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}</select>
+        <Select className="auto" value={String(uid)} onChange={v => setUid(Number(v))} placeholder="Choose a person…" options={users.map(u => ({ value: String(u.id), label: u.name || u.email, hint: u.name ? u.email : undefined }))} />
         <Segmented size="sm" value={level} onChange={setLevel} options={[{ value: 'view', label: 'View' }, { value: 'edit', label: 'Edit' }]} />
         <button className="btn primary sm" onClick={add} disabled={!uid}>Share</button>
       </div>
@@ -390,8 +392,8 @@ function FieldsEditor({ fields, values, onChange }: { fields: CustomField[]; val
       {present.map(f => { const v = values.find(x => x.field === f.id)?.value || ''; return (
         <div key={f.id} className="field-row">
           <span className="label">{f.name}{f.data_type === 'monetary' && f.extra?.currency ? ` (${f.extra.currency})` : ''}</span>
-          {f.data_type === 'boolean' ? <select value={v} onChange={e => set(f.id, e.target.value)}><option value="">—</option><option value="true">yes</option><option value="false">no</option></select>
-            : f.data_type === 'select' ? <select value={v} onChange={e => set(f.id, e.target.value)}><option value="">—</option>{(f.extra?.options || []).map(o => <option key={o} value={o}>{o}</option>)}</select>
+          {f.data_type === 'boolean' ? <Select value={v} onChange={x => set(f.id, x)} placeholder="—" clearLabel="none" options={[{ value: 'true', label: 'yes' }, { value: 'false', label: 'no' }]} />
+            : f.data_type === 'select' ? <Select value={v} onChange={x => set(f.id, x)} placeholder="—" clearLabel="none" options={(f.extra?.options || []).map(o => ({ value: o, label: o }))} />
             : f.data_type === 'date' ? <input type="date" value={v} onChange={e => set(f.id, e.target.value)} />
             : f.data_type === 'integer' || f.data_type === 'float' || f.data_type === 'monetary' ? <input value={v} inputMode="decimal" onChange={e => set(f.id, e.target.value)} placeholder={f.data_type === 'monetary' ? '0.00' : ''} />
             : f.data_type === 'url' ? <span className="row grow"><input value={v} onChange={e => set(f.id, e.target.value)} placeholder="https://" />{v && <a className="btn ghost sm" href={v} target="_blank" rel="noreferrer">↗</a>}</span>
@@ -399,7 +401,7 @@ function FieldsEditor({ fields, values, onChange }: { fields: CustomField[]; val
             : <input value={v} onChange={e => set(f.id, e.target.value)} />}
           <button type="button" className="btn ghost xs" onClick={() => remove(f.id)} aria-label="Remove field">×</button>
         </div>) })}
-      {absent.length > 0 && <select className="add-field" value="" onChange={e => { if (e.target.value) set(Number(e.target.value), '') }}><option value="">+ Add a field…</option>{absent.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select>}
+      {absent.length > 0 && <Select className="add-field" value="" onChange={x => { if (x) set(Number(x), '') }} placeholder="+ Add a field…" options={absent.map(f => ({ value: String(f.id), label: f.name, hint: FIELD_TYPES.find(t => t.value === f.data_type)?.label }))} />}
     </div>
   )
 }
@@ -495,8 +497,8 @@ function MoneyModal({ doc, onClose, onBooked }: { doc: Document; onClose: () => 
             <Field label="Amount"><input value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} inputMode="decimal" required autoFocus placeholder="0.00" /></Field>
             <Field label="Currency"><input value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value.toUpperCase() })} maxLength={3} /></Field>
           </div>
-          <Field label="Account"><select value={form.account_id} onChange={e => setForm({ ...form, account_id: Number(e.target.value) })}>{st.accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}</select></Field>
-          <Field label="Category"><select value={form.category_id} onChange={e => setForm({ ...form, category_id: Number(e.target.value) })}><option value={0}>— let Money decide —</option>{st.categories.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name}</option>)}</select></Field>
+          <Field group label="Account"><Select value={String(form.account_id)} onChange={v => setForm({ ...form, account_id: Number(v) })} options={st.accounts.map(a => ({ value: String(a.id), label: a.name, hint: a.currency }))} /></Field>
+          <Field group label="Category"><Select value={form.category_id ? String(form.category_id) : ''} onChange={v => setForm({ ...form, category_id: Number(v) || 0 })} placeholder="— let Money decide —" clearLabel="let Money decide" options={st.categories.map(c => ({ value: String(c.id), label: c.full_name || c.name }))} /></Field>
           <div className="two-col tight">
             <Field label="Date"><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></Field>
             <Field label="Payee"><input value={form.payee} onChange={e => setForm({ ...form, payee: e.target.value })} /></Field>

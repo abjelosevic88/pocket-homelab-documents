@@ -6,6 +6,7 @@ import { ALGORITHMS, FIELD_TYPES, type CustomField, type Named, type Rule, type 
 import { docsURL, fmtDate, inkFor, plural } from '../lib/format'
 import { Card, Confirm, Field, Modal, PageHeader, Segmented, Tabs, Toggle, useToast } from '../components/ui'
 import { Picker } from '../components/Picker'
+import { Select } from '../components/Select'
 
 type Tab = 'tags' | 'correspondents' | 'document_types' | 'storage_paths' | 'custom_fields' | 'rules' | 'saved_views'
 const KIND_LABEL: Record<Tab, [string, string]> = { tags: ['Tag', 'Tags'], correspondents: ['Correspondent', 'Correspondents'], document_types: ['Document type', 'Document types'], storage_paths: ['Storage path', 'Storage paths'], custom_fields: ['Custom field', 'Custom fields'], rules: ['Rule', 'Rules'], saved_views: ['Saved view', 'Saved views'] }
@@ -84,7 +85,7 @@ function TaxModal({ kind, item, onClose, onSaved }: { kind: 'tags' | 'correspond
         {kind === 'tags' && <Toggle checked={f.is_inbox} onChange={v => setF({ ...f, is_inbox: v })} label="Inbox tag: put on every new document" />}
         {kind === 'storage_paths' && <Field label="Path" help="Folders with /; the file name is the last part."><input value={f.path} onChange={e => setF({ ...f, path: e.target.value })} className="mono" required /></Field>}
         <Field label="Assign automatically" group help={alg?.help}>
-          <select value={f.matching_algorithm} onChange={e => setF({ ...f, matching_algorithm: Number(e.target.value) })}>{ALGORITHMS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}</select>
+          <Select value={String(f.matching_algorithm)} onChange={v => setF({ ...f, matching_algorithm: Number(v) })} options={ALGORITHMS.map(a => ({ value: String(a.value), label: a.label }))} />
         </Field>
         {f.matching_algorithm !== 6 && f.matching_algorithm !== 0 && <>
           <Field label={f.matching_algorithm === 4 ? 'Regular expression' : 'Words'}><input value={f.match} onChange={e => setF({ ...f, match: e.target.value })} className="mono" placeholder={f.matching_algorithm === 4 ? '(?i)invoice\\s+no' : 'stadtwerke rechnung'} /></Field>
@@ -125,7 +126,7 @@ function FieldModal({ item, onClose, onSaved }: { item: Partial<CustomField>; on
     <Modal title={item.id ? 'Edit field' : 'New field'} onClose={onClose}>
       <form onSubmit={save} className="grid" style={{ gap: 14 }}>
         <Field label="Name"><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} autoFocus required /></Field>
-        <Field label="Type" help={item.id && item.document_count ? 'The type cannot change while documents use the field.' : undefined}><select value={f.data_type} disabled={!!(item.id && item.document_count)} onChange={e => setF({ ...f, data_type: e.target.value as CustomField['data_type'] })}>{FIELD_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
+        <Field group label="Type" help={item.id && item.document_count ? 'The type cannot change while documents use the field.' : undefined}><Select value={f.data_type} disabled={!!(item.id && item.document_count)} onChange={v => setF({ ...f, data_type: v as CustomField['data_type'] })} options={FIELD_TYPES.map(t => ({ value: t.value, label: t.label }))} /></Field>
         {f.data_type === 'select' && <Field label="Choices, one per line"><textarea value={f.options} onChange={e => setF({ ...f, options: e.target.value })} rows={4} /></Field>}
         {f.data_type === 'monetary' && <Field label="Currency"><input value={f.currency} onChange={e => setF({ ...f, currency: e.target.value })} placeholder="EUR" maxLength={3} /></Field>}
         <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Save</button></div>
@@ -194,15 +195,15 @@ function RuleModal({ item, onClose, onSaved }: { item: Partial<Rule>; onClose: (
           <Field label="Runs when" group><Segmented value={r.trigger || 'added'} onChange={v => setR({ ...r, trigger: v as Rule['trigger'] })} options={[{ value: 'added', label: 'Comes in' }, { value: 'updated', label: 'Is changed' }, { value: 'scheduled', label: 'On a date' }]} /></Field>
         </div>
         {r.trigger === 'scheduled' && <div className="two-col tight">
-          <Field label="Relative to" help="Fires once per document, also for documents already past the date (up to a year late)."><select value={f.schedule_field || 'created'} onChange={e => setF({ schedule_field: e.target.value })}><option value="created">the document date</option><option value="added">the day it was added</option>{tax.custom_fields.filter(c => c.data_type === 'date').map(c => <option key={c.id} value={`cf:${c.id}`}>the field “{c.name}”</option>)}</select></Field>
+          <Field group label="Relative to" help="Fires once per document, also for documents already past the date (up to a year late)."><Select value={f.schedule_field || 'created'} onChange={v => setF({ schedule_field: v })} options={[{ value: 'created', label: 'the document date' }, { value: 'added', label: 'the day it was added' }, ...tax.custom_fields.filter(c => c.data_type === 'date').map(c => ({ value: `cf:${c.id}`, label: `the field “${c.name}”`, group: 'Date fields' }))]} /></Field>
           <Field label="Offset in days" help="Negative = before that date (−30: a month before a contract expires), positive = after."><input type="number" value={f.schedule_offset_days ?? 0} onChange={e => setF({ schedule_offset_days: Number(e.target.value) })} /></Field>
         </div>}
         <h3>When all of these fit (empty = any)</h3>
         <div className="two-col tight">
           <Field label="File name" help="* and ? wildcards, case does not matter"><input value={f.filename} onChange={e => setF({ filename: e.target.value })} placeholder="*invoice*.pdf" className="mono" /></Field>
           <Field label="Text contains"><input value={f.content} onChange={e => setF({ content: e.target.value })} placeholder="Kundennummer 1234" /></Field>
-          <Field label="Source"><select value={f.source} onChange={e => setF({ source: e.target.value })}><option value="">any</option><option value="web">web upload</option><option value="api">API</option><option value="consume">consume folder</option><option value="import">import</option><option value="paperless">Paperless import</option></select></Field>
-          <Field label="File type"><select value={f.mime} onChange={e => setF({ mime: e.target.value })}><option value="">any</option><option value="application/pdf">PDF</option><option value="image/">image</option><option value="application/vnd">office</option><option value="text/">text</option><option value="message/">e-mail</option></select></Field>
+          <Field group label="Source"><Select value={f.source} onChange={v => setF({ source: v })} placeholder="any" clearLabel="any" options={[{ value: 'web', label: 'web upload' }, { value: 'api', label: 'API' }, { value: 'consume', label: 'consume folder' }, { value: 'folder', label: 'documents folder Inbox' }, { value: 'nextcloud', label: 'Nextcloud Inbox' }, { value: 'mail', label: 'mail' }, { value: 'import', label: 'import' }, { value: 'paperless', label: 'Paperless import' }]} /></Field>
+          <Field group label="File type"><Select value={f.mime} onChange={v => setF({ mime: v })} placeholder="any" clearLabel="any" options={[{ value: 'application/pdf', label: 'PDF' }, { value: 'image/', label: 'image' }, { value: 'application/vnd', label: 'office' }, { value: 'text/', label: 'text' }, { value: 'message/', label: 'e-mail' }]} /></Field>
           <Field label="Has correspondent" group><Picker options={tax.correspondents} value={f.correspondent} onChange={v => setF({ correspondent: v as number | null })} /></Field>
           <Field label="Has document type" group><Picker options={tax.document_types} value={f.document_type} onChange={v => setF({ document_type: v as number | null })} /></Field>
         </div>

@@ -7,6 +7,7 @@ import { docsURL, plural } from '../lib/format'
 import { Card, Confirm, Empty, Field, Loading, Menu, Modal, Segmented, useToast } from '../components/ui'
 import { DocCard, DocRow } from '../components/docs'
 import { Picker } from '../components/Picker'
+import { Select } from '../components/Select'
 
 const SORTS = [['-created', 'Newest first'], ['created', 'Oldest first'], ['-added', 'Recently added'], ['title', 'Title A–Z'], ['-title', 'Title Z–A'], ['asn', 'ASN'], ['-modified', 'Recently changed'], ['-pages', 'Most pages'], ['-size', 'Largest'], ['correspondent', 'Correspondent'], ['type', 'Type'], ['rank', 'Best match']]
 const ALL_COLS = [['asn', 'ASN'], ['correspondent', 'Correspondent'], ['title', 'Title'], ['type', 'Type'], ['tags', 'Tags'], ['created', 'Created'], ['added', 'Added'], ['modified', 'Modified'], ['pages', 'Pages'], ['size', 'Size'], ['path', 'Storage path'], ['notes', 'Notes'], ['status', 'Status']]
@@ -129,8 +130,8 @@ export default function Documents() {
         </FilterGroup>
         <FilterGroup title="More">
           <Field label="ASN"><input value={params.asn} onChange={e => set({ asn: e.target.value })} placeholder="number" /></Field>
-          <Field label="File type"><select value={params.mime} onChange={e => set({ mime: e.target.value })}><option value="">any</option><option value="application/pdf">PDF</option><option value="image/">Images</option><option value="application/vnd">Office</option><option value="text/">Text</option><option value="message/">E-mail</option></select></Field>
-          {tax.custom_fields.length > 0 && <Field label="Custom field has a value"><select value="" onChange={e => { if (e.target.value) set({ field: [...params.field, e.target.value] }) }}><option value="">add…</option>{tax.custom_fields.map(f => <option key={f.id} value={String(f.id)}>{f.name}</option>)}</select>
+          <Field group label="File type"><Select value={params.mime} onChange={v => set({ mime: v })} placeholder="any" clearLabel="any" options={[{ value: 'application/pdf', label: 'PDF' }, { value: 'image/', label: 'Images' }, { value: 'application/vnd', label: 'Office' }, { value: 'text/', label: 'Text' }, { value: 'message/', label: 'E-mail' }]} /></Field>
+          {tax.custom_fields.length > 0 && <Field group label="Custom field has a value"><Select value="" onChange={v => { if (v) set({ field: [...params.field, v] }) }} placeholder="add…" options={tax.custom_fields.map(f => ({ value: String(f.id), label: f.name, hint: f.data_type }))} />
             {params.field.map(f => <Chip key={f} on onClick={() => set({ field: params.field.filter(x => x !== f) })}>{tax.custom_fields.find(x => String(x.id) === f.split(':')[0])?.name}{f.includes(':') ? ` = ${f.split(':')[1]}` : ''} ×</Chip>)}</Field>}
         </FilterGroup>
       </aside>
@@ -142,7 +143,7 @@ export default function Documents() {
             {q && <button type="button" className="x" onClick={() => { setQ(''); set({ q: '' }) }} aria-label="Clear">×</button>}
             <button type="button" className="btn ghost sm" onClick={() => setHelp(true)} title="Search syntax">?</button>
           </form>
-          <select value={params.sort || (params.q ? 'rank' : settings?.default_sort || '-created')} onChange={e => set({ sort: e.target.value })} className="sort" aria-label="Sort">{SORTS.filter(([v]) => v !== 'rank' || params.q).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+          <Select value={params.sort || (params.q ? 'rank' : settings?.default_sort || '-created')} onChange={v => set({ sort: v })} className="sort" ariaLabel="Sort" options={SORTS.filter(([v]) => v !== 'rank' || params.q).map(([v, l]) => ({ value: v, label: l }))} />
           <Segmented size="sm" value={view} onChange={setView} options={[{ value: 'table', label: '☰', title: 'Table' }, { value: 'cards', label: '▦', title: 'Cards' }, { value: 'list', label: '≡', title: 'List' }]} />
           {view === 'table' && <Menu align="right" button={<button className="btn icon" title="Columns">⋮</button>}>
             {ALL_COLS.map(([k, l]) => <label key={k} className="menu-check" onClick={e => e.stopPropagation()}><input type="checkbox" checked={cols.includes(k)} onChange={() => setCols(c => c.includes(k) ? c.filter(x => x !== k) : ALL_COLS.map(([x]) => x).filter(x => c.includes(x) || x === k))} /> {l}</label>)}

@@ -5,6 +5,7 @@ import type { MailAccount, MailAccountInput, MailFetchResult, MailRule, MailRule
 import { ago } from '../../lib/format'
 import { Card, Confirm, Field, Loading, Modal, Segmented, Toggle, useAsync, useToast } from '../../components/ui'
 import { Picker } from '../../components/Picker'
+import { Select } from '../../components/Select'
 
 const CONSUME: Record<MailRule['consume'], string> = { attachments: 'attachments', eml: 'the mail as .eml', both: 'attachments + .eml' }
 const ACTION: Record<MailRule['action'], string> = { mark_read: 'mark read', move: 'move', delete: 'delete', flag: 'flag', none: 'leave' }
@@ -175,14 +176,14 @@ function RuleModal({ rule, accounts, onClose, onSaved }: { rule: Partial<MailRul
     } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) }
   }
   const folderInput = (value: string, onChange: (v: string) => void, placeholder: string) => folders
-    ? <select value={folders.includes(value) ? value : ''} onChange={e => onChange(e.target.value)}><option value="">{value && !folders.includes(value) ? value : placeholder}</option>{folders.map(x => <option key={x} value={x}>{x}</option>)}</select>
+    ? <Select value={folders.includes(value) ? value : ''} onChange={x => onChange(x)} placeholder={value && !folders.includes(value) ? value : placeholder} options={folders.map(x => ({ value: x, label: x }))} />
     : <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} spellCheck={false} />
   return (
     <Modal title={rule.id ? 'Edit mail rule' : 'Add mail rule'} onClose={onClose} size="lg">
       <form onSubmit={save} className="grid" style={{ gap: 14 }}>
         <div className="two-col tight">
           <Field label="Name"><input value={f.name} onChange={e => set({ name: e.target.value })} autoFocus required maxLength={80} /></Field>
-          <Field label="Account"><select value={f.account_id} onChange={e => { set({ account_id: Number(e.target.value) }); setFolders(null) }}>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field>
+          <Field group label="Account"><Select value={String(f.account_id)} onChange={v => { set({ account_id: Number(v) }); setFolders(null) }} options={accounts.map(a => ({ value: String(a.id), label: a.name, hint: a.username }))} /></Field>
         </div>
         <div className="two-col tight">
           <Field label="Folder" help={<>Where to look. <button type="button" className="btn ghost sm" onClick={loadFolders} disabled={busy || !f.account_id}>{folders ? 'Reload folders' : 'List folders'}</button></>}>{folderInput(f.folder, v => set({ folder: v }), 'INBOX')}</Field>

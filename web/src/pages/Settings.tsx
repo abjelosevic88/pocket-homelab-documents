@@ -7,6 +7,7 @@ import { Card, Confirm, Field, Loading, Modal, PageHeader, Segmented, Tabs, Togg
 import { Avatar } from '../components/people'
 import { Link } from 'react-router-dom'
 import MailSettings from './settings/Mail'
+import { Select } from '../components/Select'
 
 type Tab = 'ocr' | 'folder' | 'mail' | 'prefs' | 'users' | 'profile' | 'api' | 'data' | 'integrations' | 'about'
 
@@ -218,8 +219,8 @@ function Prefs() {
           <Field label="Dates" group><Segmented value={f.date_format} onChange={v => setF({ ...f, date_format: v })} options={[{ value: 'iso', label: '2026-03-14' }, { value: 'dmy-dot', label: '14.03.2026' }, { value: 'long', label: '14 March 2026' }]} size="sm" /></Field>
           <Field label="Documents page" group><Segmented value={f.default_view} onChange={v => setF({ ...f, default_view: v })} options={[{ value: 'table', label: 'Table' }, { value: 'cards', label: 'Cards' }, { value: 'list', label: 'List' }]} size="sm" /></Field>
           <div className="two-col tight">
-            <Field label="Per page"><select value={f.page_size} onChange={e => setF({ ...f, page_size: Number(e.target.value) })}>{[25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}</select></Field>
-            <Field label="Default sort"><select value={f.default_sort} onChange={e => setF({ ...f, default_sort: e.target.value })}><option value="-created">Newest first</option><option value="created">Oldest first</option><option value="-added">Recently added</option><option value="title">Title</option><option value="asn">ASN</option></select></Field>
+            <Field group label="Per page"><Select value={String(f.page_size)} onChange={v => setF({ ...f, page_size: Number(v) })} options={[25, 50, 100, 200].map(n => ({ value: String(n), label: String(n) }))} /></Field>
+            <Field group label="Default sort"><Select value={f.default_sort} onChange={v => setF({ ...f, default_sort: v })} options={[{ value: '-created', label: 'Newest first' }, { value: 'created', label: 'Oldest first' }, { value: '-added', label: 'Recently added' }, { value: 'title', label: 'Title' }, { value: 'asn', label: 'ASN' }]} /></Field>
           </div>
           <Toggle checked={f.date_from_name} onChange={v => setF({ ...f, date_from_name: v })} label="Read the document date from the file name (2026-03-14_invoice.pdf, scan_20260314.pdf)" />
           <Toggle checked={f.date_from_text} onChange={v => setF({ ...f, date_from_text: v })} label="… or from the text when I did not set one" />
