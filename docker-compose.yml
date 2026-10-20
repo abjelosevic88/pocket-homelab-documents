@@ -1,0 +1,25 @@
+services:
+  pocket-documents:
+    image: ghcr.io/abjelosevic88/pocket-homelab-documents:latest
+    container_name: pocket-documents
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: ${TZ:-UTC}
+      BASE_URL: ${BASE_URL:-}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}   # tesseract codes joined with +, e.g. eng+deu
+      # OCR_WORKERS: "2"                    # documents processed at once (each may use OCR_THREADS cores)
+      # OCR_MODE: skip                      # skip | redo | force
+      # GOTENBERG_URL: http://gotenberg:3000  # office documents get a PDF twin
+      # MIRROR_DIR: /mirror                 # a browsable copy by storage path (switch on in Settings)
+      # Set both to skip the first-run setup screen and create the admin directly:
+      # ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # SECURE_COOKIES: "true"              # behind HTTPS
+      # AUTH_MODE: proxy                    # trust Remote-User from Authelia / Authentik / Tinyauth
+      # DEMO_DATA: "true"                   # seed sample documents into an empty database
+    volumes:
+      - ./data:/data
+      # - ./consume:/data/consume           # drop files here (a scanner share, Syncthing…)
+    # mem_limit: 2g                         # OCR of big scans is memory hungry

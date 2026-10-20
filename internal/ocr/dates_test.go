@@ -1,0 +1,19 @@
+package ocr
+
+import "testing"
+
+func TestGuessCreated(t *testing.T) {
+	for _, c := range []struct{ text, want string }{
+		{"Rechnung vom 14.03.2024\nFällig am 28.03.2024", "2024-03-14"},
+		{"Invoice date: 2023-11-02", "2023-11-02"},
+		{"Banja Luka, 5. oktobar 2025.", "2025-10-05"},
+		{"Dated March 3, 2022 at noon", "2022-03-03"},
+		{"Payment 03/14/2024 US style", "2024-03-14"},
+		{"Valid until 31.12.2999 nothing else", ""},
+		{"no dates here 12345", ""},
+	} {
+		if got := GuessCreated(c.text, true); got != c.want {
+			t.Errorf("%q: got %q want %q", c.text, got, c.want)
+		}
+	}
+}

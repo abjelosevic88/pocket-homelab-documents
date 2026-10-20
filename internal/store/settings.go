@@ -1,0 +1,198 @@
+package store
+
+import (
+	"context"
+	"strconv"
+	"strings"
+)
+
+// DefaultTitle is the app title until someone changes it.
+const DefaultTitle = "Pocket Documents"
+
+// Defaults the environment may override at start (set by the server).
+var EnvDefaults = Settings{
+	Title: DefaultTitle, OCRLanguage: "eng", OCRMode: "skip", OCRDeskew: true, OCRRotate: true, OCROutputType: "pdfa",
+	TrashDays: 30, MirrorFile: "archive", ConsumeSubdirsAsTags: true,
+	DateFormat: "iso", DefaultView: "table", PageSize: 50, DefaultSort: "-created", TitleFromName: true, DateFromText: true, SuggestOnOpen: true,
+	MoneyMode: "core",
+}
+
+func boxKeys() []string {
+	return []string{"title", "setup_complete", "ocr_language", "ocr_mode", "ocr_deskew", "ocr_rotate", "ocr_clean", "ocr_max_pages", "ocr_output_type", "trash_days", "mirror", "mirror_file", "consume_subdirs_as_tags"}
+}
+
+// GetSettings loads the box settings plus the preferences of userID, with
+// defaults applied. userID 0 gives the box settings with default preferences.
+func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error) {
+	st := EnvDefaults
+	rows, err := s.DB.QueryContext(ctx, `SELECT key, value FROM settings UNION ALL SELECT key, value FROM user_settings WHERE user_id = ?`, userID)
+	if err != nil {
+		return st, err
+	}
+	defer rows.Close()
+	atoi := func(v string, def int) int {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+		return def
+	}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return st, err
+		}
+		switch k {
+		case "title":
+			if v != "" {
+				st.Title = v
+			}
+		case "setup_complete":
+			st.SetupComplete = v == "1"
+		case "ocr_language":
+			if v != "" {
+				st.OCRLanguage = v
+			}
+		case "ocr_mode":
+			if v == "skip" || v == "redo" || v == "force" {
+				st.OCRMode = v
+			}
+		case "ocr_deskew":
+			st.OCRDeskew = v == "1"
+		case "ocr_rotate":
+			st.OCRRotate = v == "1"
+		case "ocr_clean":
+			st.OCRClean = v == "1"
+		case "ocr_max_pages":
+			st.OCRMaxPages = atoi(v, st.OCRMaxPages)
+		case "ocr_output_type":
+			if v == "pdf" || v == "pdfa" {
+				st.OCROutputType = v
+			}
+		case "trash_days":
+			st.TrashDays = atoi(v, st.TrashDays)
+		case "mirror":
+			st.Mirror = v == "1"
+		case "mirror_file":
+			if v == "original" || v == "archive" {
+				st.MirrorFile = v
+			}
+		case "consume_subdirs_as_tags":
+			st.ConsumeSubdirsAsTags = v == "1"
+		case "date_format":
+			if v == "iso" || v == "dmy-dot" || v == "long" {
+				st.DateFormat = v
+			}
+		case "default_view":
+			if v == "table" || v == "cards" || v == "list" {
+				st.DefaultView = v
+			}
+		case "page_size":
+			st.PageSize = atoi(v, st.PageSize)
+		case "default_sort":
+			if v != "" {
+				st.DefaultSort = v
+			}
+		case "title_from_name":
+			st.TitleFromName = v != "0"
+		case "date_from_text":
+			st.DateFromText = v != "0"
+		case "suggest_on_open":
+			st.SuggestOnOpen = v != "0"
+		case "money_mode":
+			if v == "core" || v == "direct" || v == "off" {
+				st.MoneyMode = v
+			}
+		case "money_url":
+			st.MoneyURL = v
+		case "money_token":
+			st.MoneyToken = v
+		case "money_account":
+			n, _ := strconv.ParseInt(v, 10, 64)
+			st.MoneyAccount = n
+		case "notify_url":
+			st.NotifyURL = v
+		}
+	}
+	return st, rows.Err()
+}
+
+func b2s(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
+// SaveBoxSettings writes the box-wide part.
+func (s *Store) SaveBoxSettings(ctx context.Context, st Settings) error {
+	vals := map[string]string{
+		"title": st.Title, "setup_complete": b2s(st.SetupComplete),
+		"ocr_language": st.OCRLanguage, "ocr_mode": st.OCRMode, "ocr_deskew": b2s(st.OCRDeskew), "ocr_rotate": b2s(st.OCRRotate), "ocr_clean": b2s(st.OCRClean),
+		"ocr_max_pages": strconv.Itoa(st.OCRMaxPages), "ocr_output_type": st.OCROutputType, "trash_days": strconv.Itoa(st.TrashDays),
+		"mirror": b2s(st.Mirror), "mirror_file": st.MirrorFile, "consume_subdirs_as_tags": b2s(st.ConsumeSubdirsAsTags),
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for k, v := range vals {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, k, v); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// SaveSettings writes one person's preferences.
+func (s *Store) SaveSettings(ctx context.Context, userID int64, st Settings) error {
+	vals := map[string]string{
+		"date_format": st.DateFormat, "default_view": st.DefaultView, "page_size": strconv.Itoa(st.PageSize), "default_sort": st.DefaultSort,
+		"title_from_name": b2s(st.TitleFromName), "date_from_text": b2s(st.DateFromText), "suggest_on_open": b2s(st.SuggestOnOpen),
+		"money_mode": st.MoneyMode, "money_url": strings.TrimSpace(st.MoneyURL), "money_account": strconv.FormatInt(st.MoneyAccount, 10),
+		"notify_url": strings.TrimSpace(st.NotifyURL),
+	}
+	if st.MoneyToken != "" {
+		vals["money_token"] = st.MoneyToken
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for k, v := range vals {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`, userID, k, v); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// SetUserSetting writes one key for one person.
+func (s *Store) SetUserSetting(ctx context.Context, userID int64, key, value string) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`, userID, key, value)
+	return err
+}
+
+// SetBoxSetting writes one box-wide key.
+func (s *Store) SetBoxSetting(ctx context.Context, key, value string) error {
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
+
+// UserIDs lists every account id.
+func (s *Store) UserIDs(ctx context.Context) []int64 {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id FROM users ORDER BY id`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			out = append(out, id)
+		}
+	}
+	return out
+}

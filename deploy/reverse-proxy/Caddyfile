@@ -1,0 +1,4 @@
+# Pocket Documents behind Caddy. Uploads can be large: raise the request body limit if you cap it elsewhere.
+documents.example.com {
+	reverse_proxy pocket-documents:8080
+}
