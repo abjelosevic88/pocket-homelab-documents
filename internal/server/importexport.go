@@ -494,7 +494,7 @@ func (s *Server) importPaperlessFixture(ctx context.Context, uid int64, raw []by
 		}
 		in := incoming{Path: tmp, Name: firstNonEmpty(f.Filename, filepath.Base(f.ExportedFile)), Title: f.Title, Created: normalizeDate(f.Created), ASN: f.ASN, Tags: mapIDs(f.Tags, tagMap),
 			Correspondent: mapID(f.Correspondent, corrMap), DocumentType: mapID(f.DocumentType, typeMap), StoragePath: mapID(f.StoragePath, pathMap), Fields: fields[r.PK],
-			Source: "paperless", Actor: actor, SkipMatching: true, Content: f.Content}
+			Source: "paperless", Actor: actor, SkipMatching: true, Content: f.Content, ExternalID: fmt.Sprintf("paperless:%d", r.PK)}
 		d, err := s.ingest(ctx, uid, in)
 		if err != nil {
 			var dup *ErrDuplicate
@@ -837,7 +837,7 @@ func (s *Server) paperlessImportJob(ctx context.Context, j *store.Job) error {
 		}
 		in := incoming{Path: tmp, Name: firstNonEmpty(pd.Filename, fmt.Sprintf("paperless-%d.pdf", pd.ID)), Title: pd.Title, Created: normalizeDate(pd.Created), ASN: pd.ASN, Tags: mapIDs(pd.Tags, tagMap),
 			Correspondent: mapID(pd.Correspondent, corrMap), DocumentType: mapID(pd.DocumentType, typeMap), StoragePath: mapID(pd.StoragePath, pathMap),
-			Source: "paperless", Actor: firstNonEmpty(p.Actor, "paperless import"), SkipMatching: true, Content: pd.Content}
+			Source: "paperless", Actor: firstNonEmpty(p.Actor, "paperless import"), SkipMatching: true, Content: pd.Content, ExternalID: fmt.Sprintf("paperless:%d", pd.ID)}
 		for _, f := range pd.Fields {
 			if nid, ok := fieldMap[f.Field]; ok && f.Value != nil {
 				in.Fields = append(in.Fields, store.FieldValue{FieldID: nid, Value: fmt.Sprint(f.Value)})

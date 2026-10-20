@@ -225,3 +225,32 @@ func TestScheduledRulesAndFilenameDates(t *testing.T) {
 }
 
 var _ = multipart.NewWriter
+
+func TestTitleFromNameAndExternalID(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		drop bool
+		want string
+	}{{"2025-12-15_godisnji_porez.jpg", true, "godisnji porez"}, {"scan_20260314.pdf", true, "scan"}, {"Rechnung 14.03.2026.pdf", true, "Rechnung"}, {"2025-12-15_x.pdf", false, "2025-12-15 x"}, {"2026-01-02.pdf", true, "Untitled"}} {
+		if got := titleFromName(c.name, c.drop); got != c.want {
+			t.Errorf("%s: %q want %q", c.name, got, c.want)
+		}
+	}
+	h := newHarness(t)
+	_, tok := h.user("alice@example.com")
+	d, code := h.upload(tok, "inv.txt", "invoice 7", map[string]string{"external_id": "invoicing:invoice:7"})
+	if code != 201 || d.ExternalID != "invoicing:invoice:7" {
+		t.Fatalf("upload with external id: %d %+v", code, d)
+	}
+	var l listOut
+	h.do(tok, "GET", "/api/v1/documents?external_id=invoicing:invoice:7", nil, &l)
+	if l.Count != 1 {
+		t.Errorf("filter by external id: %d", l.Count)
+	}
+	// the same external id again is a duplicate even with other bytes
+	buf := multipartText(t, "inv2.txt", "invoice 7, corrected")
+	var dup map[string]any
+	if code := h.do(tok, "POST", "/api/v1/documents?external_id=invoicing:invoice:7", buf.body, &dup, "Content-Type", buf.ctype); code != 409 {
+		t.Errorf("same external id: %d %v", code, dup)
+	}
+}

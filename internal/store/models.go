@@ -133,6 +133,7 @@ type Document struct {
 	Favorite        bool    `json:"favorite"`
 	ContentEdited   bool    `json:"content_edited"`
 	MirrorPath      string  `json:"mirror_path,omitempty"`
+	ExternalID      string  `json:"external_id,omitempty"`
 	DeletedAt       *string `json:"deleted_at,omitempty"`
 
 	Tags       []int64      `json:"tags"`

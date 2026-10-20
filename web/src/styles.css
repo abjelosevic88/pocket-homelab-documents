@@ -73,7 +73,7 @@ kbd.kbd, .kbd { font: 11px var(--mono); border: 1px solid var(--border); border-
 .link-btn:hover { text-decoration: underline; }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; margin-right: 6px; }
 .star { color: var(--star); margin-right: 4px; }
-.hide-sm { } .hide-lg { display: none; }
+.hide-sm { } .hide-lg, .btn.hide-lg { display: none; }
 
 /* ---- layout ---- */
 .app { display: flex; min-height: 100%; }
@@ -117,7 +117,8 @@ kbd.kbd, .kbd { font: 11px var(--mono); border: 1px solid var(--border); border-
   .scrim { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 19; }
   .main { margin-left: 0; }
   .topbar .menu-btn { display: inline-flex; }
-  .hide-sm { display: none; } .hide-lg { display: inline-flex; }
+  .hide-sm { display: none; } .hide-lg, .btn.hide-lg { display: inline-flex; }
+  .doc-head .nav-arrows { display: none; }
   .content { padding: 12px 12px calc(76px + env(safe-area-inset-bottom)); }
   .two-col { grid-template-columns: 1fr; }
   .two-col.tight { grid-template-columns: 1fr 1fr; }
@@ -314,7 +315,8 @@ button.chip-tag { cursor: pointer; }
 .thumb.sm { width: 34px; height: 44px; font-size: 16px; }
 .thumb.md { width: 60px; height: 78px; font-size: 24px; }
 .thumb.lg { width: 100%; aspect-ratio: 3 / 4; font-size: 40px; border-radius: 8px 8px 0 0; border: 0; border-bottom: 1px solid var(--border); }
-.thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; background: #fff; }
+.thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; background: #fff; z-index: 1; }
+.thumb .pages { z-index: 2; }
 .thumb-fallback { opacity: .7; }
 .thumb .pages { position: absolute; right: 3px; bottom: 3px; font-size: 10px; background: rgba(0,0,0,.6); color: #fff; border-radius: 4px; padding: 0 4px; }
 .doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }

@@ -13,6 +13,8 @@ func TestGuessCreated(t *testing.T) {
 		{"Payment 03/14/2024 US style", "2024-03-14"},
 		{"Valid until 31.12.2999 nothing else", ""},
 		{"no dates here 12345", ""},
+		{"Број: 06/1.07/0702-455-31/25\nДатум: 15.12.2025.", "2025-12-15"},
+		{"Ref 12.3-2024 then 01.02.2024", "2024-02-01"},
 	} {
 		if got := GuessCreated(c.text, true); got != c.want {
 			t.Errorf("%q: got %q want %q", c.text, got, c.want)

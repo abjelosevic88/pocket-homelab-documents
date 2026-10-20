@@ -90,6 +90,7 @@ func (s *Server) listFilter(r *http.Request) (store.DocFilter, search.Parsed) {
 	f.TitleContains = firstNonEmpty(q.Get("title"), p.Title)
 	f.Trash = queryBool(r, "trash")
 	f.SharedWithMe = queryBool(r, "shared")
+	f.ExternalID = strings.TrimSpace(q.Get("external_id"))
 	f.IDs = ints("ids")
 	f.Fields = map[int64]string{}
 	for name, v := range p.Fields {

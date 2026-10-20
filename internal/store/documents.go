@@ -46,6 +46,7 @@ type DocFilter struct {
 	TitleContains   string
 	Trash           bool // the deleted ones instead of the live ones
 	SharedWithMe    bool // documents other accounts shared with UserID, instead of my own
+	ExternalID      string
 
 	Sort   string // created | -created | added | title | asn | modified | size | pages | correspondent | type | rank
 	Limit  int
@@ -69,7 +70,7 @@ type Facets struct {
 
 const docCols = `d.id, d.user_id, d.title, d.correspondent_id, d.document_type_id, d.storage_path_id, d.asn, d.created, d.added_at, d.modified_at,
 	d.original_name, d.original_ext, d.mime, d.checksum, d.size, d.archive_checksum, d.archive_size, d.has_archive, d.has_thumb, d.page_count, d.language,
-	d.status, d.status_message, d.source, d.favorite, d.content_edited, d.mirror_path, d.deleted_at,
+	d.status, d.status_message, d.source, d.favorite, d.content_edited, d.mirror_path, d.external_id, d.deleted_at,
 	(SELECT COUNT(1) FROM notes n WHERE n.document_id = d.id),
 	COALESCE((SELECT c.name FROM correspondents c WHERE c.id = d.correspondent_id), ''),
 	COALESCE((SELECT t.name FROM document_types t WHERE t.id = d.document_type_id), '')`
@@ -79,7 +80,7 @@ func scanDoc(row interface{ Scan(...any) error }, content, snippet bool) (*Docum
 	var hasArchive, hasThumb, fav, edited int
 	dest := []any{&d.ID, &d.UserID, &d.Title, &d.CorrespondentID, &d.DocumentTypeID, &d.StoragePathID, &d.ASN, &d.Created, &d.AddedAt, &d.ModifiedAt,
 		&d.OriginalName, &d.OriginalExt, &d.Mime, &d.Checksum, &d.Size, &d.ArchiveChecksum, &d.ArchiveSize, &hasArchive, &hasThumb, &d.PageCount, &d.Language,
-		&d.Status, &d.StatusMessage, &d.Source, &fav, &edited, &d.MirrorPath, &d.DeletedAt, &d.NotesCount, &d.CorrespondentName, &d.DocumentTypeName}
+		&d.Status, &d.StatusMessage, &d.Source, &fav, &edited, &d.MirrorPath, &d.ExternalID, &d.DeletedAt, &d.NotesCount, &d.CorrespondentName, &d.DocumentTypeName}
 	if content {
 		dest = append(dest, &d.Content)
 	}
@@ -177,9 +178,9 @@ func (s *Store) CreateDocument(ctx context.Context, d *Document) error {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `INSERT INTO documents (user_id, title, content, correspondent_id, document_type_id, storage_path_id, asn, created, original_name, original_ext, mime, checksum, size, status, source, favorite, language)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.UserID, d.Title, d.Content, d.CorrespondentID, d.DocumentTypeID, d.StoragePathID, d.ASN, d.Created, d.OriginalName, d.OriginalExt, d.Mime, d.Checksum, d.Size, d.Status, d.Source, boolInt(d.Favorite), d.Language)
+	res, err := tx.ExecContext(ctx, `INSERT INTO documents (user_id, title, content, correspondent_id, document_type_id, storage_path_id, asn, created, original_name, original_ext, mime, checksum, size, status, source, favorite, language, external_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.UserID, d.Title, d.Content, d.CorrespondentID, d.DocumentTypeID, d.StoragePathID, d.ASN, d.Created, d.OriginalName, d.OriginalExt, d.Mime, d.Checksum, d.Size, d.Status, d.Source, boolInt(d.Favorite), d.Language, d.ExternalID)
 	if err != nil {
 		return conflict(err)
 	}
@@ -474,6 +475,15 @@ func (s *Store) TrashOlderThan(ctx context.Context, days int) ([]Document, error
 	return out, rows.Err()
 }
 
+// FindByExternalID finds a person's live document by its external id.
+func (s *Store) FindByExternalID(ctx context.Context, userID int64, ext string) (*Document, error) {
+	var id int64
+	if err := s.DB.QueryRowContext(ctx, `SELECT id FROM documents WHERE user_id = ? AND external_id = ? AND deleted_at IS NULL`, userID, ext).Scan(&id); err != nil {
+		return nil, notFound(err)
+	}
+	return s.GetDocument(ctx, userID, id, false)
+}
+
 // FindByChecksum finds a live document with the same original file.
 func (s *Store) FindByChecksum(ctx context.Context, userID int64, sum string) (*Document, error) {
 	var id int64
@@ -759,6 +769,10 @@ func (f DocFilter) where() (string, []any, string, []any) {
 	if len(f.IDs) > 0 {
 		w = append(w, "d.id IN ("+inList(f.IDs)+")")
 	}
+	if f.ExternalID != "" {
+		w = append(w, "d.external_id = ?")
+		args = append(args, f.ExternalID)
+	}
 	if f.TitleContains != "" {
 		w = append(w, "d.title LIKE ? ESCAPE '\\'")
 		args = append(args, LikePattern(f.TitleContains))
@@ -880,7 +894,7 @@ func scanDocWithTail(rows *sql.Rows, content bool) (*Document, error) {
 	var cn2, tn2 string
 	dest := []any{&d.ID, &d.UserID, &d.Title, &d.CorrespondentID, &d.DocumentTypeID, &d.StoragePathID, &d.ASN, &d.Created, &d.AddedAt, &d.ModifiedAt,
 		&d.OriginalName, &d.OriginalExt, &d.Mime, &d.Checksum, &d.Size, &d.ArchiveChecksum, &d.ArchiveSize, &hasArchive, &hasThumb, &d.PageCount, &d.Language,
-		&d.Status, &d.StatusMessage, &d.Source, &fav, &edited, &d.MirrorPath, &d.DeletedAt, &d.NotesCount, &d.CorrespondentName, &d.DocumentTypeName}
+		&d.Status, &d.StatusMessage, &d.Source, &fav, &edited, &d.MirrorPath, &d.ExternalID, &d.DeletedAt, &d.NotesCount, &d.CorrespondentName, &d.DocumentTypeName}
 	if content {
 		dest = append(dest, &d.Content)
 	}

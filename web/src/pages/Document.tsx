@@ -114,7 +114,7 @@ export default function DocumentPage() {
     <div className="doc-page">
       <div className="doc-head">
         <Link to="/documents" className="btn ghost sm">← Documents</Link>
-        <span className="row">
+        <span className="row nav-arrows">
           <button className="btn ghost sm" disabled={!nav.prev} onClick={() => navigate(`/documents/${nav.prev}`)} title="Newer (←)">‹</button>
           <button className="btn ghost sm" disabled={!nav.next} onClick={() => navigate(`/documents/${nav.next}`)} title="Older (→)">›</button>
         </span>

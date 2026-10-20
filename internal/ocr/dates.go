@@ -74,6 +74,17 @@ func FindDates(text string, dayFirst bool) []time.Time {
 		hits = append(hits, hit{m[0], atoi(text[m[2]:m[3]]), atoi(text[m[4]:m[5]]), atoi(text[m[6]:m[7]])})
 	}
 	for _, m := range numericDate.FindAllStringSubmatchIndex(text, -1) {
+		// "14.03.2026" yes; "06/1.07/0702" (a reference number) no: both
+		// separators the same, and not glued to more digits or separators
+		if text[m[3]] != text[m[5]] {
+			continue
+		}
+		if m[0] > 0 && strings.ContainsRune("0123456789/.-", rune(text[m[0]-1])) {
+			continue
+		}
+		if m[1] < len(text) && (text[m[1]] == '/' || text[m[1]] == '-' || (text[m[1]] == '.' && m[1]+1 < len(text) && text[m[1]+1] >= '0' && text[m[1]+1] <= '9')) {
+			continue
+		}
 		a, b, y := atoi(text[m[2]:m[3]]), atoi(text[m[4]:m[5]]), atoi(text[m[6]:m[7]])
 		d, mo := a, b
 		if !dayFirst || a > 12 && b <= 12 {

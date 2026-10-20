@@ -36,6 +36,7 @@ type incoming struct {
 	AllowDup      bool
 	SkipMatching  bool
 	Content       string // text already known (imports)
+	ExternalID    string // where it came from elsewhere ("paperless:12", "invoicing:invoice:7")
 }
 
 // ErrDuplicate is returned when the same file is already in.
@@ -65,6 +66,12 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 	if err != nil {
 		return nil, err
 	}
+	if in.ExternalID != "" {
+		if ex, err := s.store.FindByExternalID(ctx, uid, in.ExternalID); err == nil {
+			os.Remove(in.Path)
+			return nil, &ErrDuplicate{Existing: ex}
+		}
+	}
 	if !in.AllowDup {
 		if ex, err := s.store.FindByChecksum(ctx, uid, sum); err == nil {
 			os.Remove(in.Path)
@@ -72,20 +79,18 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 		}
 	}
 	st, _ := s.store.GetSettings(ctx, uid)
+	fromName := false
 	if in.Created == "" && st.DateFromName {
 		in.Created = dateFromName(in.Name)
+		fromName = in.Created != ""
 	}
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
-		title = strings.TrimSuffix(in.Name, filepath.Ext(in.Name))
-		title = strings.TrimSpace(strings.NewReplacer("_", " ").Replace(title))
-		if title == "" {
-			title = "Untitled"
-		}
+		title = titleFromName(in.Name, fromName)
 	}
 	d := &store.Document{UserID: uid, Title: title, Created: firstNonEmpty(in.Created, store.Today()), ASN: in.ASN, Tags: append([]int64{}, in.Tags...), Fields: in.Fields,
 		CorrespondentID: in.Correspondent, DocumentTypeID: in.DocumentType, StoragePathID: in.StoragePath,
-		OriginalName: in.Name, OriginalExt: ext, Mime: extract.Mime(ext), Checksum: sum, Size: size, Source: firstNonEmpty(in.Source, "web"), Content: in.Content}
+		OriginalName: in.Name, OriginalExt: ext, Mime: extract.Mime(ext), Checksum: sum, Size: size, Source: firstNonEmpty(in.Source, "web"), Content: in.Content, ExternalID: strings.TrimSpace(in.ExternalID)}
 	if st.ConsumeSubdirsAsTags {
 		for _, sub := range in.SubDirs {
 			if t, err := s.store.FindTag(ctx, uid, sub); err == nil {
@@ -121,6 +126,32 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 		return d, err
 	}
 	return d, nil
+}
+
+var nameDates = []*regexp.Regexp{
+	regexp.MustCompile(`(?:19|20)\d{2}[-_.](?:0[1-9]|1[0-2])[-_.](?:0[1-9]|[12]\d|3[01])`),
+	regexp.MustCompile(`(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.(?:19|20)\d{2}`),
+	regexp.MustCompile(`(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])`),
+}
+
+// titleFromName makes a title of a file name: separators become spaces and,
+// when the date was read from the name, the date goes (it is the document date now).
+func titleFromName(name string, dropDate bool) string {
+	t := strings.TrimSuffix(name, filepath.Ext(name))
+	if dropDate {
+		for _, re := range nameDates {
+			if loc := re.FindStringIndex(t); loc != nil {
+				t = t[:loc[0]] + " " + t[loc[1]:]
+				break
+			}
+		}
+	}
+	t = strings.Join(strings.Fields(strings.NewReplacer("_", " ").Replace(t)), " ")
+	t = strings.Trim(t, " -.")
+	if t == "" {
+		return "Untitled"
+	}
+	return t
 }
 
 // dateFromName reads a date from a file name: 2026-03-14_invoice.pdf,
@@ -179,7 +210,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			results = append(results, map[string]any{"file": name, "error": err.Error()})
 			return
 		}
-		in := incoming{Path: tmp, Name: name, Title: meta["title"], Created: meta["created"], Source: firstNonEmpty(meta["source"], "web"), Actor: actor, AllowDup: meta["allow_duplicates"] == "1" || meta["allow_duplicates"] == "true"}
+		in := incoming{Path: tmp, Name: name, Title: meta["title"], Created: meta["created"], Source: firstNonEmpty(meta["source"], "web"), Actor: actor, AllowDup: meta["allow_duplicates"] == "1" || meta["allow_duplicates"] == "true", ExternalID: meta["external_id"]}
 		if meta["created"] != "" {
 			in.Created = normalizeDate(meta["created"])
 		}
@@ -233,6 +264,9 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		meta := map[string]string{}
+		for k := range r.URL.Query() { // query parameters count as form fields (scripts, Shortcuts)
+			meta[k] = r.URL.Query().Get(k)
+		}
 		type pending struct {
 			name string
 			tmp  string
