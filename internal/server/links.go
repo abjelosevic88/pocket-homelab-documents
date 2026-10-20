@@ -79,7 +79,7 @@ func (s *Server) linkUser(ctx context.Context, tok string, r *http.Request) (*st
 	if !linkAllows(strings.Fields(in.Scope), r) {
 		return nil, errLinkScope
 	}
-	return s.firstOrSystemUser(ctx, strings.ToLower(in.User.Email), in.User.Name)
+	return s.coreIdentityUser(ctx, in)
 }
 
 // linkAppOf names the acting app of a pcx_ request, for the history.

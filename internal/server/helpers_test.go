@@ -39,6 +39,9 @@ func newHarness(t *testing.T) *harness {
 	}
 	t.Cleanup(func() { st.Close() })
 	s := New(cfg, st, log, nil)
+	if err := s.core.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	for _, d := range []string{cfg.OriginalsDir, cfg.ArchiveDir, cfg.ThumbsDir, cfg.PagesDir, cfg.ConsumeDir, cfg.TmpDir} {
 		_ = mkdir(d)
 	}

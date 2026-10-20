@@ -70,7 +70,7 @@ type resolvedURL struct {
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Server {
 	s := &Server{cfg: cfg, store: st, log: log, webFS: webFS, started: time.Now(), http: &http.Client{Timeout: 20 * time.Second},
 		oidc:        &oidcProvider{issuerURL: cfg.OIDCIssuer},
-		core:        core.New(cfg.CoreURL, core.Options{TokenFile: cfg.DataDir + "/core.token"}),
+		core:        core.New(cfg.CoreURL, core.Options{DB: st.DB, TokenFile: cfg.DataDir + "/core.token"}),
 		resolved:    map[string]resolvedURL{},
 		classifiers: match.NewCache(),
 		folders:     map[int64]*docFolder{},
@@ -89,6 +89,9 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 // Bootstrap seeds the first admin (if configured) and demo data, and starts
 // the workers, the consume folder watcher and the janitor.
 func (s *Server) Bootstrap(ctx context.Context) error {
+	if err := s.core.Start(ctx); err != nil {
+		return err
+	}
 	for _, d := range []string{s.cfg.OriginalsDir, s.cfg.ArchiveDir, s.cfg.ThumbsDir, s.cfg.PagesDir, s.cfg.ConsumeDir, s.cfg.TmpDir, s.cfg.DataDir + "/backups"} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return fmt.Errorf("data dir %s: %w", d, err)
@@ -213,17 +216,15 @@ func (s *Server) publish(userID int64, topic, subject string, payload map[string
 	if !s.core.Configured() {
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		payload["user_id"] = userID
-		if u, err := s.store.GetUser(ctx, userID); err == nil {
-			payload["user_email"] = u.Email
-		}
-		if err := s.core.Publish(ctx, topic, subject, payload); err != nil {
-			s.log.Warn("pocket core: publish failed", "topic", topic, "err", err)
-		}
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	payload["user_id"] = userID
+	if u, err := s.store.GetUser(ctx, userID); err == nil {
+		payload["user_email"] = u.Email
+	}
+	if err := s.core.Publish(ctx, topic, subject, payload); err != nil {
+		s.log.Warn("pocket core: outbox enqueue failed", "topic", topic, "err", err)
+	}
 }
 
 // resolveSibling asks Core where a sibling app lives (cached a minute).
@@ -595,7 +596,7 @@ func (s *Server) handleClientError(w http.ResponseWriter, r *http.Request) {
 // ---------- health / metrics ----------
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": Version, "uptime": time.Since(s.started).Round(time.Second).String()})
+	writeJSON(w, http.StatusOK, map[string]any{"core_outbox": s.coreOutboxHealth(r.Context()), "status": "ok", "version": Version, "uptime": time.Since(s.started).Round(time.Second).String()})
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {

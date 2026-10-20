@@ -47,6 +47,9 @@ func newFakeIdP(t *testing.T, clientID, secret string) *fakeIdP {
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"issuer": p.URL, "authorization_endpoint": p.URL + "/authorize", "token_endpoint": p.URL + "/token", "jwks_uri": p.URL + "/jwks"})
 	})
+	mux.HandleFunc("/api/v1/auth/subject", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"active": true, "iss": p.URL})
+	})
 	mux.HandleFunc("/jwks", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{"kty": "RSA", "use": "sig", "kid": "k1", "n": b64(k.N.Bytes()), "e": b64(big.NewInt(int64(k.E)).Bytes())}}})
 	})
@@ -70,7 +73,7 @@ func newFakeIdP(t *testing.T, clientID, secret string) *fakeIdP {
 			return
 		}
 		head, _ := json.Marshal(map[string]string{"alg": "RS256", "kid": "k1", "typ": "JWT"})
-		body, _ := json.Marshal(map[string]any{"iss": p.URL, "sub": "u1", "aud": p.clientID, "exp": time.Now().Add(time.Hour).Unix(), "nonce": p.nonces[code], "email": p.email, "email_verified": p.verified, "name": "Aleksandar"})
+		body, _ := json.Marshal(map[string]any{"iss": p.URL, "sub": strings.ToLower(p.email), "auth_revision": int64(1), "aud": p.clientID, "exp": time.Now().Add(time.Hour).Unix(), "nonce": p.nonces[code], "email": p.email, "email_verified": p.verified, "name": "Aleksandar"})
 		signing := b64(head) + "." + b64(body)
 		h := sha256.Sum256([]byte(signing))
 		signer := p.key
@@ -105,6 +108,9 @@ func newOIDCHarness(t *testing.T, cfg *config.Config) *oidcHarness {
 	ts := httptest.NewUnstartedServer(nil)
 	cfg.BaseURL = "http://" + ts.Listener.Addr().String()
 	s := New(cfg, st, log, nil)
+	if err := s.core.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	ts.Config.Handler = s.Router()
 	ts.Start()
 	t.Cleanup(ts.Close)
@@ -206,7 +212,7 @@ func TestOIDCFromCore(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{DataDir: dir, DBPath: dir + "/t.db", AuthMode: "local",
-		SessionTTL: time.Hour, CoreURL: "http://core.invalid", OIDCName: "single sign-on", OIDCAutoCreate: true}
+		SessionTTL: time.Hour, CoreURL: idp.URL, OIDCName: "single sign-on", OIDCAutoCreate: true}
 	h := newOIDCHarness(t, cfg)
 
 	if status := h.status(); status["oidc"] != true || status["oidc_name"] != "Pocket Core" {
@@ -233,7 +239,7 @@ func TestOIDCFromCore(t *testing.T) {
 
 	// explicit OIDC_* env wins over the Core-issued client
 	env := newOIDCHarness(t, &config.Config{DataDir: dir, DBPath: dir + "/e.db", AuthMode: "local", SessionTTL: time.Hour,
-		CoreURL: "http://core.invalid", OIDCIssuer: "https://id.example", OIDCClientID: "x", OIDCName: "PocketID"})
+		CoreURL: idp.URL, OIDCIssuer: "https://id.example", OIDCClientID: "x", OIDCName: "PocketID"})
 	if status := env.status(); status["oidc"] != true || status["oidc_name"] != "PocketID" {
 		t.Errorf("env precedence %v", status)
 	}
