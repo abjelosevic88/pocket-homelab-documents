@@ -329,7 +329,7 @@ func TestExportImportAndShare(t *testing.T) {
 	fixture := `[{"model":"documents.tag","pk":5,"fields":{"name":"Paperless tag","color":"#ff0000","match":"","matching_algorithm":6,"is_insensitive":true,"is_inbox_tag":false}},
 	{"model":"documents.correspondent","pk":2,"fields":{"name":"Old Corr","match":"","matching_algorithm":6,"is_insensitive":true}},
 	{"model":"documents.note","pk":1,"fields":{"document":9,"note":"from paperless"}},
-	{"model":"documents.document","pk":9,"fields":{"title":"Paperless doc","content":"hello","created":"2023-05-06T00:00:00Z","correspondent":2,"tags":[5],"original_filename":"pl.txt","__exported_file_name__":"0000009.txt"}}]`
+	{"model":"documents.document","pk":9,"fields":{"title":"Paperless doc","content":"hello","created":"2023-05-06T00:00:00Z","added":"2023-05-07T10:11:12Z","correspondent":2,"tags":[5],"original_filename":"pl.txt","__exported_file_name__":"0000009.txt"}}]`
 	zipBytes := makeZip(t, map[string]string{"manifest.json": fixture, "0000009.txt": "hello from paperless export"})
 	buf = multipartFile(t, "paperless.zip", zipBytes)
 	if code := h.do(bob, "POST", "/api/v1/import", buf.body, &res, "Content-Type", buf.ctype); code != 200 || res.Documents != 1 {
@@ -337,7 +337,7 @@ func TestExportImportAndShare(t *testing.T) {
 	}
 	h.drain()
 	h.do(bob, "GET", "/api/v1/documents?q=paperless", nil, &l)
-	if l.Count != 1 || l.Results[0].Created != "2023-05-06" || l.Results[0].CorrespondentName != "Old Corr" || l.Results[0].NotesCount != 1 {
+	if l.Count != 1 || l.Results[0].Created != "2023-05-06" || l.Results[0].CorrespondentName != "Old Corr" || l.Results[0].NotesCount != 1 || !strings.HasPrefix(l.Results[0].AddedAt, "2023-05-07T10:11:12") || l.Results[0].ExternalID != "paperless:9" {
 		t.Fatalf("paperless doc: %+v", l.Results)
 	}
 }

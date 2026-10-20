@@ -240,6 +240,10 @@ func ocrPDF(ctx context.Context, tools *Tools, in, work string, o Options) (arch
 				}
 				if exit == 1 && strings.Contains(stderr.String(), "DynamicPdfError") {
 					warnings = append(warnings, "the PDF has dynamic XFA forms; its text was read without OCR")
+				} else if extract.Kind(filepath.Ext(in)) == "pdf" {
+					// A PDF OCRmyPDF cannot rewrite (broken structure, odd producers):
+					// keep the original as it is and read whatever text it carries.
+					warnings = append(warnings, fmt.Sprintf("OCRmyPDF could not process this PDF (exit %d: %s); the original is kept and its own text was read", exit, strings.TrimSpace(lastLine(stderr.String()))))
 				} else {
 					return "", "", nil, fmt.Errorf("ocrmypdf failed (exit %d): %s", exit, strings.TrimSpace(lastLine(stderr.String())))
 				}

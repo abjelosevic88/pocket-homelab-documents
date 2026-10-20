@@ -280,7 +280,7 @@ func (s *Server) importZip(ctx context.Context, uid int64, path, actor string) (
 		}
 		in := incoming{Path: tmp, Name: firstNonEmpty(ed.OriginalName, filepath.Base(ed.Original)), Title: ed.Title, Created: ed.Created, ASN: ed.ASN, Tags: mapIDs(ed.Tags, tagMap),
 			Correspondent: mapID(ed.CorrespondentID, corrMap), DocumentType: mapID(ed.DocumentTypeID, typeMap), StoragePath: mapID(ed.StoragePathID, pathMap),
-			Source: "import", Actor: actor, SkipMatching: true, Content: ed.Content}
+			Source: "import", Actor: actor, SkipMatching: true, Content: ed.Content, AddedAt: ed.AddedAt}
 		for _, fv := range ed.Fields {
 			if nid, ok := fieldMap[fv.FieldID]; ok {
 				in.Fields = append(in.Fields, store.FieldValue{FieldID: nid, Value: fv.Value})
@@ -477,6 +477,7 @@ func (s *Server) importPaperlessFixture(ctx context.Context, uid int64, raw []by
 			Tags          []int64 `json:"tags"`
 			Filename      string  `json:"original_filename"`
 			DeletedAt     *string `json:"deleted_at"`
+			Added         string  `json:"added"`
 			ExportedFile  string  `json:"__exported_file_name__"`
 		}
 		_ = json.Unmarshal(r.Fields, &f)
@@ -494,7 +495,7 @@ func (s *Server) importPaperlessFixture(ctx context.Context, uid int64, raw []by
 		}
 		in := incoming{Path: tmp, Name: firstNonEmpty(f.Filename, filepath.Base(f.ExportedFile)), Title: f.Title, Created: normalizeDate(f.Created), ASN: f.ASN, Tags: mapIDs(f.Tags, tagMap),
 			Correspondent: mapID(f.Correspondent, corrMap), DocumentType: mapID(f.DocumentType, typeMap), StoragePath: mapID(f.StoragePath, pathMap), Fields: fields[r.PK],
-			Source: "paperless", Actor: actor, SkipMatching: true, Content: f.Content, ExternalID: fmt.Sprintf("paperless:%d", r.PK)}
+			Source: "paperless", Actor: actor, SkipMatching: true, Content: f.Content, ExternalID: fmt.Sprintf("paperless:%d", r.PK), AddedAt: f.Added}
 		d, err := s.ingest(ctx, uid, in)
 		if err != nil {
 			var dup *ErrDuplicate
@@ -819,6 +820,7 @@ func (s *Server) paperlessImportJob(ctx context.Context, j *store.Job) error {
 			StoragePath   *int64  `json:"storage_path"`
 			Tags          []int64 `json:"tags"`
 			Filename      string  `json:"original_file_name"`
+			Added         string  `json:"added"`
 			Notes         []struct {
 				Note string `json:"note"`
 			} `json:"notes"`
@@ -837,7 +839,7 @@ func (s *Server) paperlessImportJob(ctx context.Context, j *store.Job) error {
 		}
 		in := incoming{Path: tmp, Name: firstNonEmpty(pd.Filename, fmt.Sprintf("paperless-%d.pdf", pd.ID)), Title: pd.Title, Created: normalizeDate(pd.Created), ASN: pd.ASN, Tags: mapIDs(pd.Tags, tagMap),
 			Correspondent: mapID(pd.Correspondent, corrMap), DocumentType: mapID(pd.DocumentType, typeMap), StoragePath: mapID(pd.StoragePath, pathMap),
-			Source: "paperless", Actor: firstNonEmpty(p.Actor, "paperless import"), SkipMatching: true, Content: pd.Content, ExternalID: fmt.Sprintf("paperless:%d", pd.ID)}
+			Source: "paperless", Actor: firstNonEmpty(p.Actor, "paperless import"), SkipMatching: true, Content: pd.Content, ExternalID: fmt.Sprintf("paperless:%d", pd.ID), AddedAt: pd.Added}
 		for _, f := range pd.Fields {
 			if nid, ok := fieldMap[f.Field]; ok && f.Value != nil {
 				in.Fields = append(in.Fields, store.FieldValue{FieldID: nid, Value: fmt.Sprint(f.Value)})

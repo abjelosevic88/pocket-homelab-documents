@@ -37,6 +37,7 @@ type incoming struct {
 	SkipMatching  bool
 	Content       string // text already known (imports)
 	ExternalID    string // where it came from elsewhere ("paperless:12", "invoicing:invoice:7")
+	AddedAt       string // RFC 3339; imports keep when the document first came in
 }
 
 // ErrDuplicate is returned when the same file is already in.
@@ -90,7 +91,7 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 	}
 	d := &store.Document{UserID: uid, Title: title, Created: firstNonEmpty(in.Created, store.Today()), ASN: in.ASN, Tags: append([]int64{}, in.Tags...), Fields: in.Fields,
 		CorrespondentID: in.Correspondent, DocumentTypeID: in.DocumentType, StoragePathID: in.StoragePath,
-		OriginalName: in.Name, OriginalExt: ext, Mime: extract.Mime(ext), Checksum: sum, Size: size, Source: firstNonEmpty(in.Source, "web"), Content: in.Content, ExternalID: strings.TrimSpace(in.ExternalID)}
+		OriginalName: in.Name, OriginalExt: ext, Mime: extract.Mime(ext), Checksum: sum, Size: size, Source: firstNonEmpty(in.Source, "web"), Content: in.Content, ExternalID: strings.TrimSpace(in.ExternalID), AddedAt: in.AddedAt}
 	if st.ConsumeSubdirsAsTags {
 		for _, sub := range in.SubDirs {
 			if t, err := s.store.FindTag(ctx, uid, sub); err == nil {

@@ -185,6 +185,13 @@ func (s *Store) CreateDocument(ctx context.Context, d *Document) error {
 		return conflict(err)
 	}
 	d.ID, _ = res.LastInsertId()
+	if d.AddedAt != "" {
+		if t, err := time.Parse(time.RFC3339Nano, d.AddedAt); err == nil && t.Before(time.Now()) {
+			if _, err := tx.ExecContext(ctx, `UPDATE documents SET added_at = ? WHERE id = ?`, t.UTC().Format(time.RFC3339Nano), d.ID); err != nil {
+				return err
+			}
+		}
+	}
 	for _, t := range d.Tags {
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO document_tags (document_id, tag_id) SELECT ?, id FROM tags WHERE id = ? AND user_id = ?`, d.ID, t, d.UserID); err != nil {
 			return err
@@ -198,7 +205,10 @@ func (s *Store) CreateDocument(ctx context.Context, d *Document) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	d.AddedAt, d.ModifiedAt = Now(), Now()
+	if d.AddedAt == "" {
+		d.AddedAt = Now()
+	}
+	d.ModifiedAt = Now()
 	return s.IndexDocument(ctx, d.ID)
 }
 
