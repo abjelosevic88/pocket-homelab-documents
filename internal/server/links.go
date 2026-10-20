@@ -112,6 +112,14 @@ func (s *Server) reportModes(ctx context.Context) {
 			mode = "off"
 		}
 		modes = append(modes, core.ConnMode{User: u.Email, Target: "money", Mode: mode})
+		nc := "off"
+		if st.FolderKind == "nextcloud" {
+			nc = "direct"
+			if st.FolderViaCore {
+				nc = "core"
+			}
+		}
+		modes = append(modes, core.ConnMode{User: u.Email, Target: "service:nextcloud", Mode: nc})
 	}
 	c, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

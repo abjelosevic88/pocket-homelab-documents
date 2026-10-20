@@ -24,7 +24,8 @@ func (s *Server) publicSettings(r *http.Request, st store.Settings) map[string]a
 		"title": st.Title, "setup_complete": st.SetupComplete,
 		"ocr_language": st.OCRLanguage, "ocr_mode": st.OCRMode, "ocr_deskew": st.OCRDeskew, "ocr_rotate": st.OCRRotate, "ocr_clean": st.OCRClean,
 		"ocr_max_pages": st.OCRMaxPages, "ocr_output_type": st.OCROutputType, "trash_days": st.TrashDays,
-		"mirror": st.Mirror, "mirror_file": st.MirrorFile, "mirror_dir": s.cfg.MirrorDir, "consume_dir": s.cfg.ConsumeDir, "consume_subdirs_as_tags": st.ConsumeSubdirsAsTags,
+		"consume_dir": s.cfg.ConsumeDir, "consume_subdirs_as_tags": st.ConsumeSubdirsAsTags, "folder_roots": s.cfg.FolderRoots,
+		"folder_kind": st.FolderKind,
 		"date_format": st.DateFormat, "default_view": st.DefaultView, "page_size": st.PageSize, "default_sort": st.DefaultSort,
 		"title_from_name": st.TitleFromName, "date_from_text": st.DateFromText, "suggest_on_open": st.SuggestOnOpen,
 		"money_mode": st.MoneyMode, "money_url": st.MoneyURL, "money_token_set": st.MoneyToken != "", "money_account": st.MoneyAccount,
@@ -79,18 +80,10 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		st.OCRMaxPages = clampInt(st.OCRMaxPages, 0, 5000)
 		st.TrashDays = clampInt(st.TrashDays, 0, 3650)
-		if st.MirrorFile != "original" {
-			st.MirrorFile = "archive"
-		}
 		st.SetupComplete = cur.SetupComplete
 		if err := s.store.SaveBoxSettings(ctx, st); err != nil {
 			s.fail(w, err, "save settings")
 			return
-		}
-		if st.Mirror && !cur.Mirror {
-			if _, err := s.store.EnqueueJob(ctx, uid, nil, "mirror_all", nil); err == nil {
-				s.nudge()
-			}
 		}
 	}
 	// personal part
@@ -105,6 +98,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		st.MoneyMode = "core"
 	}
 	st.MoneyToken = ""
+	// the documents folder has its own endpoint; what it saved stays
+	st.FolderKind, st.FolderPath, st.FolderURL, st.FolderUser, st.FolderName, st.FolderViaCore, st.FolderFile, st.FolderInbox, st.FolderInboxName = cur.FolderKind, cur.FolderPath, cur.FolderURL, cur.FolderUser, cur.FolderName, cur.FolderViaCore, cur.FolderFile, cur.FolderInbox, cur.FolderInboxName
 	if in.MoneyToken != nil {
 		st.MoneyToken = strings.TrimSpace(*in.MoneyToken)
 		if st.MoneyToken == "" {
@@ -168,7 +163,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 		}
 		out["data_dir"], out["db_path"], out["db_bytes"] = s.cfg.DataDir, s.cfg.DBPath, size
 		out["originals_bytes"], out["archive_bytes"], out["thumbs_bytes"], out["pages_bytes"] = dirSize(s.cfg.OriginalsDir), dirSize(s.cfg.ArchiveDir), dirSize(s.cfg.ThumbsDir), dirSize(s.cfg.PagesDir)
-		out["consume_dir"], out["mirror_dir"] = s.cfg.ConsumeDir, s.cfg.MirrorDir
+		out["consume_dir"], out["folder_roots"] = s.cfg.ConsumeDir, s.cfg.FolderRoots
 		q, run, failed := s.store.JobCounts(r.Context(), 0)
 		out["jobs"] = map[string]int{"queued": q, "running": run, "failed": failed}
 		out["box_counts"] = s.store.Counts(r.Context())

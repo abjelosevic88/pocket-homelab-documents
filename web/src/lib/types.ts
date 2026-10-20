@@ -72,9 +72,6 @@ export interface Settings {
   ocr_max_pages: number
   ocr_output_type: 'pdfa' | 'pdf'
   trash_days: number
-  mirror: boolean
-  mirror_file: 'archive' | 'original'
-  mirror_dir: string
   consume_dir: string
   consume_subdirs_as_tags: boolean
   date_format: 'iso' | 'dmy-dot' | 'long'
@@ -93,6 +90,15 @@ export interface Settings {
   tools: Tools
   max_upload_bytes: number
   ocr_workers: number
+}
+
+export type FolderKind = 'none' | 'folder' | 'webdav' | 'nextcloud'
+export interface FolderStatus { where?: string; kind?: FolderKind; error?: string; last_write?: string; last_inbox?: string; inbox_error?: string; taken?: number; inbox_path?: string }
+export interface FolderInfo {
+  kind: FolderKind; path: string; url: string; user: string; folder: string; via_core: boolean; password_set: boolean
+  file: 'archive' | 'original'; inbox: boolean; inbox_name: string
+  roots: string[] | null; core: boolean; core_nextcloud?: { url: string; user: string }; core_nextcloud_error?: string
+  status: FolderStatus
 }
 
 export interface Stats {

@@ -31,7 +31,7 @@ func newHarness(t *testing.T) *harness {
 	dir := t.TempDir()
 	cfg := &config.Config{AuthMode: "local", SessionTTL: time.Hour, DataDir: dir, DBPath: dir + "/t.db",
 		OriginalsDir: dir + "/originals", ArchiveDir: dir + "/archive", ThumbsDir: dir + "/thumbs", PagesDir: dir + "/pages", ConsumeDir: dir + "/consume", MirrorDir: dir + "/mirror", TmpDir: dir + "/tmp",
-		MaxUploadBytes: 50 << 20, OCRWorkers: 1, OCRThreads: 1, OCRTimeout: time.Minute, OCRLanguage: "eng", OCRMode: "skip", OCROutputType: "pdfa", ConsumePoll: time.Hour, ConsumeDelete: true}
+		MaxUploadBytes: 50 << 20, OCRWorkers: 1, OCRThreads: 1, OCRTimeout: time.Minute, OCRLanguage: "eng", OCRMode: "skip", OCROutputType: "pdfa", ConsumePoll: time.Hour, ConsumeDelete: true, FolderRoots: []string{dir + "/mirror"}, FolderPoll: time.Hour}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	st, err := store.Open(cfg.DBPath, log)
 	if err != nil {
@@ -128,7 +128,7 @@ func (h *harness) upload(tok, name, text string, fields map[string]string) (*sto
 func (h *harness) drain() {
 	h.t.Helper()
 	for i := 0; i < 100; i++ {
-		j, err := h.st.ClaimJob(context.Background(), []string{"process", "reprocess", "import_paperless", "reindex", "mirror_all", "run_rule"})
+		j, err := h.st.ClaimJob(context.Background(), []string{"process", "reprocess", "import_paperless", "reindex", "mirror_all", "folder_sync", "run_rule"})
 		if err != nil {
 			h.t.Fatal(err)
 		}

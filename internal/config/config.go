@@ -23,9 +23,11 @@ type Config struct {
 	OriginalsDir   string // uploaded files as they came
 	ArchiveDir     string // the OCR'd PDF/A twin
 	ThumbsDir      string
-	PagesDir       string // page images rendered on demand
-	ConsumeDir     string // a watched folder: drop a file, it becomes a document
-	MirrorDir      string // a browsable copy laid out by storage path (switched on in Settings)
+	PagesDir       string   // page images rendered on demand
+	ConsumeDir     string   // a watched folder: drop a file, it becomes a document
+	MirrorDir      string   // the default server folder offered as a documents folder
+	FolderRoots    []string // server folders people may choose as their documents folder (FOLDER_ROOTS)
+	FolderPoll     time.Duration
 	TmpDir         string
 	LogLevel       string
 	LogFormat      string // text | json
@@ -160,6 +162,7 @@ func Load() (*Config, error) {
 		OCRDPI:        envInt("OCR_IMAGE_DPI", 300),
 		GotenbergURL:  strings.TrimRight(env("GOTENBERG_URL", ""), "/"),
 		ConsumePoll:   envDuration("CONSUME_POLL", 10*time.Second),
+		FolderPoll:    envDuration("FOLDER_INBOX_POLL", 2*time.Minute),
 		ConsumeDelete: envBool("CONSUME_DELETE", true),
 
 		AuthMode:             strings.ToLower(env("AUTH_MODE", "local")),
@@ -185,6 +188,17 @@ func Load() (*Config, error) {
 	}
 	if c.CoreAppURL == "" {
 		c.CoreAppURL = c.BaseURL
+	}
+	for _, r := range strings.Split(env("FOLDER_ROOTS", ""), ",") {
+		if r = strings.TrimSpace(r); r != "" {
+			c.FolderRoots = append(c.FolderRoots, r)
+		}
+	}
+	if len(c.FolderRoots) == 0 && c.MirrorDir != "" {
+		c.FolderRoots = []string{c.MirrorDir}
+	}
+	if c.FolderPoll < 15*time.Second {
+		c.FolderPoll = 15 * time.Second
 	}
 	switch c.AuthMode {
 	case "local", "proxy", "none":

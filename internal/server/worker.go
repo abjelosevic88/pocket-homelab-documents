@@ -23,7 +23,7 @@ func (s *Server) startWorkers(ctx context.Context) {
 	for i := 0; i < s.cfg.OCRWorkers; i++ {
 		go s.workLoop(ctx, []string{"process", "reprocess"}, i)
 	}
-	go s.workLoop(ctx, []string{"import_paperless", "reindex", "mirror_all", "run_rule"}, 99)
+	go s.workLoop(ctx, []string{"import_paperless", "reindex", "mirror_all", "folder_sync", "run_rule"}, 99)
 }
 
 // nudge wakes the workers up at once instead of on the next tick.
@@ -72,8 +72,8 @@ func (s *Server) runJob(ctx context.Context, j *store.Job) {
 		err = s.paperlessImportJob(ctx, j)
 	case "reindex":
 		_, err = s.store.ReindexAll(ctx, j.UserID)
-	case "mirror_all":
-		err = s.mirrorAllJob(ctx, j)
+	case "mirror_all", "folder_sync":
+		err = s.folderSyncJob(ctx, j)
 	case "run_rule":
 		err = s.runRuleJob(ctx, j)
 	default:
@@ -200,8 +200,8 @@ func (s *Server) processJob(ctx context.Context, j *store.Job) error {
 		d, _ = s.store.GetDocumentAny(ctx, d.ID, true)
 	}
 	_ = s.store.IndexDocument(ctx, d.ID)
-	if err := s.mirror(ctx, d); err != nil {
-		logf("mirror: %v", err)
+	if err := s.placeInFolder(ctx, d); err != nil {
+		logf("documents folder: %v", err)
 	}
 	s.classifiers.Invalidate(d.UserID)
 	action := "processed"
@@ -372,7 +372,7 @@ func (s *Server) runRuleJob(ctx context.Context, j *store.Job) error {
 		if changed, err := s.store.UpdateDocument(ctx, j.UserID, id, s.ruleChanges(ctx, *r, d)); err == nil && len(changed) > 0 {
 			s.store.AddHistory(ctx, id, j.UserID, "rule: "+r.Name, "rule", changed)
 			if nd, err := s.store.GetDocument(ctx, j.UserID, id, false); err == nil {
-				_ = s.mirror(ctx, nd)
+				_ = s.placeInFolder(ctx, nd)
 			}
 			n++
 		}
@@ -382,25 +382,6 @@ func (s *Server) runRuleJob(ctx context.Context, j *store.Job) error {
 	}
 	s.store.JobProgress(ctx, j.ID, "", fmt.Sprintf("rule “%s”: %d of %d documents changed", r.Name, n, len(ids)))
 	s.classifiers.Invalidate(j.UserID)
-	return nil
-}
-
-// mirrorAllJob (re)writes the mirror folder for a person's documents.
-func (s *Server) mirrorAllJob(ctx context.Context, j *store.Job) error {
-	ids := s.store.DocumentIDs(ctx, j.UserID, false)
-	for i, id := range ids {
-		d, err := s.store.GetDocument(ctx, j.UserID, id, false)
-		if err != nil {
-			continue
-		}
-		if err := s.mirror(ctx, d); err != nil {
-			s.store.JobProgress(ctx, j.ID, "", fmt.Sprintf("#%d: %v", id, err))
-		}
-		if i%25 == 0 {
-			s.store.JobProgress(ctx, j.ID, fmt.Sprintf("%d of %d", i+1, len(ids)), "")
-		}
-	}
-	s.store.JobProgress(ctx, j.ID, "", fmt.Sprintf("%d documents mirrored", len(ids)))
 	return nil
 }
 

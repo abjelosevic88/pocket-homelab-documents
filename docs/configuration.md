@@ -14,7 +14,9 @@ Everything is an environment variable; every one has a default, so `docker run` 
 | `ARCHIVE_DIR` | `DATA_DIR/archive` | The PDF/A twins with the text layer, `<id>.pdf`. |
 | `THUMBS_DIR` / `PAGES_DIR` | `DATA_DIR/thumbs`, `DATA_DIR/pages` | Thumbnails; page images rendered on demand (a cache, safe to delete). |
 | `CONSUME_DIR` | `DATA_DIR/consume` | The watched folder. |
-| `MIRROR_DIR` | `DATA_DIR/mirror` | The browsable copy laid out by storage path; switched on in Settings. |
+| `FOLDER_ROOTS` | `MIRROR_DIR` | Comma-separated server folders people may choose as their *documents folder* (Settings → Documents folder → Server folder). Mount a NAS share and list it here. |
+| `MIRROR_DIR` | `DATA_DIR/mirror` | The server folder offered when `FOLDER_ROOTS` is not set. |
+| `FOLDER_INBOX_POLL` | `2m` | How often every person's documents-folder Inbox is looked at. A file is taken once it looks the same on two looks. |
 | `TMP_DIR` | `DATA_DIR/tmp` | Uploads and OCR scratch space. Big scans need room here. |
 | `MAX_UPLOAD_BYTES` | 200 MB | Per file. |
 | `TRUST_PROXY` | `true` | Use `X-Forwarded-For` for the client IP. |
@@ -67,10 +69,14 @@ DATA_DIR/
   thumbs/<id>.jpg
   pages/<id>/<n>.jpg      page images, rendered on demand (cache)
   consume/                drop files here
-  mirror/                 the browsable copy (when switched on)
+  mirror/                 the default server folder people may choose as their documents folder
   backups/                `pocket-documents backup` and Settings → Download database
   core.token              the Pocket Core app token (when registered)
 ```
+
+## The documents folder
+
+Each person may choose, in Settings → Documents folder, a place the app keeps in step with their archive: **None**, a **server folder** (one of `FOLDER_ROOTS`), **Nextcloud** (their account through Pocket Core, or an address + app password typed in; a folder inside their files, `Documents` by default) or any **WebDAV** server. There the app writes one file per document (the PDF/A with its text layer, or the original), laid out by storage path, and renames, re-files and removes it as the document changes. Its **Inbox** sub-folder works the other way: files dropped there (from the Nextcloud phone app, a synced folder, a scanner) become documents and are removed from the Inbox once in; sub-folders of the Inbox become tags. The archive itself always stays under `DATA_DIR`: that is what OCR, previews and backups use. Credentials typed in are stored in the database; the ones from Pocket Core are asked for on every use and never stored.
 
 ## CLI
 

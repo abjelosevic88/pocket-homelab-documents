@@ -70,7 +70,7 @@ export default function Upload() {
       </div>
       <Card className="mt" title="Other ways in">
         <div className="two-col">
-          <div><h3>Consume folder</h3><p className="muted small">Anything dropped into <code>{settings?.consume_dir || 'DATA_DIR/consume'}</code> on the server becomes a document (a scanner's network share, Syncthing, Nextcloud…). A sub-folder named after a person's email is theirs; other sub-folders become tags.</p></div>
+          <div><h3>Consume folder and your Inbox</h3><p className="muted small">Anything dropped into <code>{settings?.consume_dir || 'DATA_DIR/consume'}</code> on the server becomes a document (a scanner's network share, Syncthing…). A sub-folder named after a person's email is theirs; other sub-folders become tags. With a <Link to="/settings?tab=folder">documents folder</Link> in your Nextcloud, its <b>Inbox</b> does the same from any device.</p></div>
           <div><h3>API and scripts</h3><pre>{`curl -F document=@scan.pdf -F tags=1,2 -H "Authorization: Bearer <token>" ${location.origin}/api/v1/documents`}</pre><p className="muted small">Tokens under Settings → API tokens. <code>/api/v1/documents/post_document</code> accepts what Paperless clients send.</p></div>
         </div>
       </Card>

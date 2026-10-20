@@ -397,3 +397,10 @@ button.chip-tag { cursor: pointer; }
 .jobs-table td { max-width: 320px; }
 .joblog { max-height: 60vh; font-size: 12px; }
 .jobs-table tr.failed td:first-child { border-left: 3px solid var(--danger); }
+
+/* ---- documents folder ---- */
+.storage-kinds { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.storage-kind { font: inherit; text-align: left; display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); cursor: pointer; }
+.storage-kind:hover { border-color: var(--accent); }
+.storage-kind.active { border-color: var(--accent); background: var(--accent-soft); }
+.storage-kind small { font-size: 12px; line-height: 1.35; }

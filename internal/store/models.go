@@ -261,9 +261,21 @@ type Settings struct {
 	OCRMaxPages          int    `json:"ocr_max_pages"`
 	OCROutputType        string `json:"ocr_output_type"`
 	TrashDays            int    `json:"trash_days"`
-	Mirror               bool   `json:"mirror"`
-	MirrorFile           string `json:"mirror_file"` // archive | original
 	ConsumeSubdirsAsTags bool   `json:"consume_subdirs_as_tags"`
+
+	// The person's documents folder: a readable copy of the archive laid out
+	// by storage path, on this server, a WebDAV server or their Nextcloud,
+	// whose Inbox sub-folder feeds new files in.
+	FolderKind      string `json:"folder_kind"` // none | folder | webdav | nextcloud
+	FolderPath      string `json:"folder_path"` // folder: absolute path on the server
+	FolderURL       string `json:"folder_url"`  // webdav: the folder's address; nextcloud: the server
+	FolderUser      string `json:"folder_user"`
+	FolderPassword  string `json:"-"`
+	FolderName      string `json:"folder_name"`     // nextcloud: the folder inside the person's files
+	FolderViaCore   bool   `json:"folder_via_core"` // nextcloud: account from Pocket Core
+	FolderFile      string `json:"folder_file"`     // archive | original
+	FolderInbox     bool   `json:"folder_inbox"`    // take new files from <folder>/<inbox name>
+	FolderInboxName string `json:"folder_inbox_name"`
 
 	// Per person
 	DateFormat    string `json:"date_format"`  // iso | dmy-dot | long

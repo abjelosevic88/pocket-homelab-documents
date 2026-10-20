@@ -79,14 +79,11 @@ func (s *Server) removeFiles(d *store.Document) {
 	_ = os.Remove(s.archivePath(d.ID))
 	_ = os.Remove(s.thumbPath(d.ID))
 	_ = os.RemoveAll(filepath.Join(s.cfg.PagesDir, strconv.FormatInt(d.ID, 10)))
-	if d.MirrorPath != "" {
-		_ = os.Remove(filepath.Join(s.cfg.MirrorDir, d.MirrorPath))
-		s.pruneEmptyDirs(filepath.Dir(filepath.Join(s.cfg.MirrorDir, d.MirrorPath)))
-	}
 }
 
-// purgeDocument deletes a document for good: row and files.
+// purgeDocument deletes a document for good: row, files and its copy in the folder.
 func (s *Server) purgeDocument(ctx context.Context, d *store.Document) error {
+	s.unplace(ctx, d)
 	if err := s.store.PurgeDocument(ctx, d.UserID, d.ID); err != nil {
 		return err
 	}
@@ -199,18 +196,7 @@ func (s *Server) saveUpload(r io.Reader, ext string) (path, sum string, size int
 	return path, sum, size, nil
 }
 
-// pruneEmptyDirs removes empty folders up to (not including) the mirror root.
-func (s *Server) pruneEmptyDirs(dir string) {
-	root := filepath.Clean(s.cfg.MirrorDir)
-	for dir != root && strings.HasPrefix(dir, root) {
-		if err := os.Remove(dir); err != nil {
-			return
-		}
-		dir = filepath.Dir(dir)
-	}
-}
-
-// ---- mirror folder ----
+// ---- storage path templates ----
 
 var tmplVar = regexp.MustCompile(`\{([a-z_]+)\}`)
 
@@ -288,60 +274,6 @@ func renderPath(tmpl string, d *store.Document, names store.NameMaps) string {
 	return filepath.Join(parts...)
 }
 
-// mirror writes (or moves) the document's copy in the mirror folder according
-// to its storage path, and removes the old copy when the path changed.
-func (s *Server) mirror(ctx context.Context, d *store.Document) error {
-	st, _ := s.store.GetSettings(ctx, 0)
-	if !st.Mirror || s.cfg.MirrorDir == "" {
-		return nil
-	}
-	names := s.store.Names(ctx, d.UserID)
-	tmpl := "{created_year}/{title}"
-	if d.StoragePathID != nil {
-		if t, ok := names.PathTemplates[*d.StoragePathID]; ok && strings.TrimSpace(t) != "" {
-			tmpl = t
-		}
-	}
-	rel := renderPath(tmpl, d, names)
-	src, _, _ := s.bestFile(d)
-	if st.MirrorFile == "original" || !d.HasArchive {
-		src = s.originalPath(d)
-		rel += "." + firstNonEmpty(d.OriginalExt, "bin")
-	} else {
-		rel += ".pdf"
-	}
-	if _, err := os.Stat(src); err != nil {
-		return nil // nothing to mirror yet
-	}
-	// avoid clobbering another document's copy
-	dst := filepath.Join(s.cfg.MirrorDir, rel)
-	if d.MirrorPath != rel {
-		if _, err := os.Stat(dst); err == nil {
-			ext := filepath.Ext(rel)
-			rel = strings.TrimSuffix(rel, ext) + fmt.Sprintf(" (#%d)", d.ID) + ext
-			dst = filepath.Join(s.cfg.MirrorDir, rel)
-		}
-	}
-	if d.MirrorPath != "" && d.MirrorPath != rel {
-		old := filepath.Join(s.cfg.MirrorDir, d.MirrorPath)
-		_ = os.Remove(old)
-		s.pruneEmptyDirs(filepath.Dir(old))
-	}
-	_ = os.MkdirAll(filepath.Dir(dst), 0o755)
-	srcInfo, _ := os.Stat(src)
-	if dstInfo, err := os.Stat(dst); err == nil && srcInfo != nil && os.SameFile(srcInfo, dstInfo) {
-		return s.store.SetMirrorPath(ctx, d.ID, rel)
-	}
-	_ = os.Remove(dst)
-	if err := os.Link(src, dst); err != nil {
-		if err := copyFile(src, dst); err != nil {
-			return err
-		}
-	}
-	d.MirrorPath = rel
-	return s.store.SetMirrorPath(ctx, d.ID, rel)
-}
-
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -357,15 +289,4 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
-}
-
-// unmirror removes a document's copy from the mirror folder (when mirroring is switched off).
-func (s *Server) unmirror(ctx context.Context, d *store.Document) {
-	if d.MirrorPath == "" {
-		return
-	}
-	p := filepath.Join(s.cfg.MirrorDir, d.MirrorPath)
-	_ = os.Remove(p)
-	s.pruneEmptyDirs(filepath.Dir(p))
-	_ = s.store.SetMirrorPath(ctx, d.ID, "")
 }

@@ -289,13 +289,13 @@ func (s *Server) relatedIDs(ctx contextT, col string, id int64) []int64 {
 	return out
 }
 
-// remirrorPath moves every document of a storage path in the mirror folder
+// remirrorPath moves every document of a storage path in the documents folder
 // after its template changed.
 func (s *Server) remirrorPath(uid, pathID int64) {
 	ctx := contextBG()
 	for _, id := range s.relatedIDs(ctx, "storage_path", pathID) {
 		if d, err := s.store.GetDocument(ctx, uid, id, false); err == nil {
-			_ = s.mirror(ctx, d)
+			_ = s.placeInFolder(ctx, d)
 		}
 	}
 }

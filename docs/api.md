@@ -36,6 +36,15 @@ Matching algorithms: `0` none, `1` any word, `2` all words, `3` exact phrase, `4
 | `GET/POST /rules`, `PUT/DELETE /rules/{id}`, `POST /rules/{id}/run` | `{name, enabled, trigger: added\|updated, filters: {filename, path, source, mime, content, correspondent, document_type, tags[]}, actions: {title, add_tags[], remove_tags[], correspondent, document_type, storage_path, fields{}, favorite}}` |
 | `GET /jobs?status=active\|failed&limit=`, `GET /jobs/{id}` (with log), `POST /jobs/{id}/retry`, `POST /jobs/{id}/cancel`, `DELETE /jobs` | |
 
+## Documents folder
+
+| | |
+| --- | --- |
+| `GET /folder` | `{kind, path, url, user, folder, via_core, password_set, file, inbox, inbox_name, roots, core, core_nextcloud?, status: {where, last_write, last_inbox, taken, error?, inbox_error?}}` |
+| `PUT /folder {kind: none\|folder\|webdav\|nextcloud, path, url, user, password, folder, via_core, file: archive\|original, inbox, inbox_name}` | tests the place, saves, and queues writing every document there |
+| `POST /folder/test {…the same}` | `{where, files, folders, inbox_files}` |
+| `POST /folder/sync` · `POST /folder/inbox` | write everything again · look into the Inbox now |
+
 ## The rest
 
 `GET /dashboard` (Homepage widget: `documents`, `inbox`, `untagged`, `pending`, `failed`, `added_today`, `added_week`, `storage_mb`, …), `GET /statistics`, `GET /changes` (a stamp that moves when anything changes), `GET /trash`, `DELETE /trash`, `GET /export?no_archive=1` (zip), `POST /import` (multipart zip: ours or a Paperless export), `POST /import/paperless {url, token}` and `…/test`, `POST /reindex`, `POST /retrain`, `GET/PUT /settings`, `GET /settings/system`, `GET /users`…, `GET /tokens`…, `GET /backup` (admin), `GET /healthz`, `GET /metrics`.

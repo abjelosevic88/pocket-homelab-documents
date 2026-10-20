@@ -12,13 +12,10 @@ const DefaultTitle = "Pocket Documents"
 // Defaults the environment may override at start (set by the server).
 var EnvDefaults = Settings{
 	Title: DefaultTitle, OCRLanguage: "eng", OCRMode: "skip", OCRDeskew: true, OCRRotate: true, OCROutputType: "pdfa",
-	TrashDays: 30, MirrorFile: "archive", ConsumeSubdirsAsTags: true,
+	TrashDays: 30, ConsumeSubdirsAsTags: true,
+	FolderKind: "none", FolderName: "Documents", FolderFile: "archive", FolderInbox: true, FolderInboxName: "Inbox",
 	DateFormat: "iso", DefaultView: "table", PageSize: 50, DefaultSort: "-created", TitleFromName: true, DateFromText: true, SuggestOnOpen: true,
 	MoneyMode: "core",
-}
-
-func boxKeys() []string {
-	return []string{"title", "setup_complete", "ocr_language", "ocr_mode", "ocr_deskew", "ocr_rotate", "ocr_clean", "ocr_max_pages", "ocr_output_type", "trash_days", "mirror", "mirror_file", "consume_subdirs_as_tags"}
 }
 
 // GetSettings loads the box settings plus the preferences of userID, with
@@ -70,11 +67,31 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			}
 		case "trash_days":
 			st.TrashDays = atoi(v, st.TrashDays)
-		case "mirror":
-			st.Mirror = v == "1"
-		case "mirror_file":
+		case "folder_kind":
+			if v == "none" || v == "folder" || v == "webdav" || v == "nextcloud" {
+				st.FolderKind = v
+			}
+		case "folder_path":
+			st.FolderPath = v
+		case "folder_url":
+			st.FolderURL = v
+		case "folder_user":
+			st.FolderUser = v
+		case "folder_password":
+			st.FolderPassword = v
+		case "folder_name":
+			st.FolderName = v
+		case "folder_via_core":
+			st.FolderViaCore = v == "1"
+		case "folder_file":
 			if v == "original" || v == "archive" {
-				st.MirrorFile = v
+				st.FolderFile = v
+			}
+		case "folder_inbox":
+			st.FolderInbox = v == "1"
+		case "folder_inbox_name":
+			if v != "" {
+				st.FolderInboxName = v
 			}
 		case "consume_subdirs_as_tags":
 			st.ConsumeSubdirsAsTags = v == "1"
@@ -129,7 +146,7 @@ func (s *Store) SaveBoxSettings(ctx context.Context, st Settings) error {
 		"title": st.Title, "setup_complete": b2s(st.SetupComplete),
 		"ocr_language": st.OCRLanguage, "ocr_mode": st.OCRMode, "ocr_deskew": b2s(st.OCRDeskew), "ocr_rotate": b2s(st.OCRRotate), "ocr_clean": b2s(st.OCRClean),
 		"ocr_max_pages": strconv.Itoa(st.OCRMaxPages), "ocr_output_type": st.OCROutputType, "trash_days": strconv.Itoa(st.TrashDays),
-		"mirror": b2s(st.Mirror), "mirror_file": st.MirrorFile, "consume_subdirs_as_tags": b2s(st.ConsumeSubdirsAsTags),
+		"consume_subdirs_as_tags": b2s(st.ConsumeSubdirsAsTags),
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -154,6 +171,13 @@ func (s *Store) SaveSettings(ctx context.Context, userID int64, st Settings) err
 	}
 	if st.MoneyToken != "" {
 		vals["money_token"] = st.MoneyToken
+	}
+	for k, v := range map[string]string{"folder_kind": st.FolderKind, "folder_path": st.FolderPath, "folder_url": st.FolderURL, "folder_user": st.FolderUser, "folder_name": st.FolderName,
+		"folder_via_core": b2s(st.FolderViaCore), "folder_file": st.FolderFile, "folder_inbox": b2s(st.FolderInbox), "folder_inbox_name": st.FolderInboxName} {
+		vals[k] = v
+	}
+	if st.FolderPassword != "" {
+		vals["folder_password"] = st.FolderPassword
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {

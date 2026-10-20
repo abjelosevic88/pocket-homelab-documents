@@ -262,7 +262,7 @@ func (s *Server) applyChanges(ctx contextT, uid, id int64, c store.DocChanges, a
 	s.classifiers.Invalidate(uid)
 	if d, err := s.store.GetDocument(ctx, uid, id, false); err == nil {
 		if _, ok := changed["content"]; !ok {
-			_ = s.mirror(ctx, d)
+			_ = s.placeInFolder(ctx, d)
 		}
 		fields := make([]string, 0, len(changed))
 		for k := range changed {
@@ -288,7 +288,7 @@ func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "delete document")
 		return
 	}
-	s.unmirror(ctx, d)
+	s.unplace(ctx, d)
 	s.store.AddHistory(ctx, id, uid, actorName(r), "deleted", nil)
 	s.classifiers.Invalidate(uid)
 	s.publish(uid, "documents.deleted", "document:"+strconv.FormatInt(id, 10), map[string]any{"id": id, "title": d.Title})
@@ -303,7 +303,7 @@ func (s *Server) handleRestoreDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	s.store.AddHistory(ctx, id, uid, actorName(r), "restored", nil)
 	if d, err := s.store.GetDocument(ctx, uid, id, false); err == nil {
-		_ = s.mirror(ctx, d)
+		_ = s.placeInFolder(ctx, d)
 		writeJSON(w, http.StatusOK, d)
 		return
 	}
@@ -740,7 +740,7 @@ func (s *Server) handleBulk(w http.ResponseWriter, r *http.Request) {
 			var d *store.Document
 			if d, err = s.store.GetDocument(ctx, uid, id, false); err == nil {
 				if err = s.store.SoftDeleteDocument(ctx, uid, id); err == nil {
-					s.unmirror(ctx, d)
+					s.unplace(ctx, d)
 					s.store.AddHistory(ctx, id, uid, actor, "deleted", nil)
 					s.publish(uid, "documents.deleted", "document:"+strconv.FormatInt(id, 10), map[string]any{"id": id, "title": d.Title})
 				}
@@ -749,7 +749,7 @@ func (s *Server) handleBulk(w http.ResponseWriter, r *http.Request) {
 			if err = s.store.RestoreDocument(ctx, uid, id); err == nil {
 				s.store.AddHistory(ctx, id, uid, actor, "restored", nil)
 				if d, e := s.store.GetDocument(ctx, uid, id, false); e == nil {
-					_ = s.mirror(ctx, d)
+					_ = s.placeInFolder(ctx, d)
 				}
 			}
 		case "purge":

@@ -54,6 +54,8 @@ type Server struct {
 	resolved map[string]resolvedURL
 
 	classifiers *match.Cache
+	foldersMu   sync.Mutex
+	folders     map[int64]*docFolder
 	wake        chan struct{} // nudges the workers
 	workersOn   bool
 	processing  sync.Map // document id → job id while a worker has it
@@ -71,6 +73,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 		core:        core.New(cfg.CoreURL, core.Options{TokenFile: cfg.DataDir + "/core.token"}),
 		resolved:    map[string]resolvedURL{},
 		classifiers: match.NewCache(),
+		folders:     map[int64]*docFolder{},
 		wake:        make(chan struct{}, 1),
 	}
 	store.EnvDefaults.OCRLanguage = cfg.OCRLanguage
@@ -128,6 +131,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	}
 	s.startWorkers(ctx)
 	go s.consumeLoop(ctx)
+	go s.inboxLoop(ctx)
 	go s.janitor(ctx)
 	if s.core.Configured() {
 		go s.coreLoop(ctx)
@@ -182,6 +186,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Publishes: []string{"documents.added", "documents.processed", "documents.updated", "documents.deleted", "documents.failed"},
 		Offers:    linkOffers,
 		Uses:      linkUses,
+		Services:  serviceUses,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.oidcCallbackURL()}}
@@ -409,6 +414,11 @@ func (s *Server) Router() http.Handler {
 			r.Get("/settings", s.handleGetSettings)
 			r.Put("/settings", s.handlePutSettings)
 			r.Get("/settings/system", s.handleSystemInfo)
+			r.Get("/folder", s.handleGetFolder)
+			r.Put("/folder", s.handlePutFolder)
+			r.Post("/folder/test", s.handleTestFolder)
+			r.Post("/folder/sync", s.handleFolderSync)
+			r.Post("/folder/inbox", s.handleFolderInbox)
 			r.Post("/settings/notify/test", s.handleTestNotify)
 			r.Get("/money/status", s.handleMoneyStatus)
 

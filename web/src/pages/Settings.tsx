@@ -1,22 +1,23 @@
 import { useEffect, useState } from 'react'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { APIToken, Settings as SettingsT, User, Job } from '../lib/types'
-import { bytes, stamp } from '../lib/format'
+import type { APIToken, Settings as SettingsT, User, Job, FolderInfo, FolderKind } from '../lib/types'
+import { ago, bytes, stamp } from '../lib/format'
 import { Card, Confirm, Field, Loading, Modal, PageHeader, Segmented, Tabs, Toggle, useAsync, useToast } from '../components/ui'
 import { Avatar } from '../components/people'
 import { Link } from 'react-router-dom'
 
-type Tab = 'ocr' | 'prefs' | 'users' | 'profile' | 'api' | 'data' | 'integrations' | 'about'
+type Tab = 'ocr' | 'folder' | 'prefs' | 'users' | 'profile' | 'api' | 'data' | 'integrations' | 'about'
 
 export default function Settings() {
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get('tab') as Tab) || 'ocr')
   return (
     <>
       <PageHeader title="Settings" />
-      <Tabs tabs={[{ id: 'ocr', label: 'OCR & storage' }, { id: 'prefs', label: 'Preferences' }, { id: 'users', label: 'Users' }, { id: 'profile', label: 'Profile' }, { id: 'api', label: 'API tokens' }, { id: 'data', label: 'Import & export' }, { id: 'integrations', label: 'Integrations' }, { id: 'about', label: 'About' }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ id: 'ocr', label: 'OCR' }, { id: 'folder', label: 'Documents folder' }, { id: 'prefs', label: 'Preferences' }, { id: 'users', label: 'Users' }, { id: 'profile', label: 'Profile' }, { id: 'api', label: 'API tokens' }, { id: 'data', label: 'Import & export' }, { id: 'integrations', label: 'Integrations' }, { id: 'about', label: 'About' }]} value={tab} onChange={setTab} />
       <div className="mt">
         {tab === 'ocr' && <OCR />}
+        {tab === 'folder' && <Folder />}
         {tab === 'prefs' && <Prefs />}
         {tab === 'users' && <Users />}
         {tab === 'profile' && <Profile />}
@@ -74,12 +75,6 @@ function OCR() {
             <Field label="Consume folder" help="Files dropped here become documents. A sub-folder named like a person's email is theirs; other sub-folders become tags."><input value={f.consume_dir} readOnly className="mono" /></Field>
             <Toggle checked={f.consume_subdirs_as_tags} onChange={v => setF({ ...f, consume_subdirs_as_tags: v })} label="Sub-folders of the consume folder become tags" disabled={!isAdmin} />
             <hr />
-            <Toggle checked={f.mirror} onChange={v => setF({ ...f, mirror: v })} label="Keep a browsable mirror folder laid out by storage path" disabled={!isAdmin} />
-            {f.mirror && <>
-              <Field label="Mirror folder"><input value={f.mirror_dir} readOnly className="mono" /></Field>
-              <Field label="Which file" group><Segmented value={f.mirror_file} onChange={v => setF({ ...f, mirror_file: v })} options={[{ value: 'archive', label: 'PDF/A with text' }, { value: 'original', label: 'Original' }]} size="sm" /></Field>
-              <p className="muted small">Hard links where the file system allows, copies otherwise. Point MIRROR_DIR at a NAS share and your archive is readable without this app.</p>
-            </>}
             <Field label="Keep deleted documents for" help="Days in the trash before the files are removed; 0 = until you empty the trash."><input type="number" min={0} value={f.trash_days} onChange={e => setF({ ...f, trash_days: Number(e.target.value) })} disabled={!isAdmin} style={{ width: 120 }} /></Field>
             {isAdmin && <div><button className="btn primary" onClick={() => save()} disabled={busy}>Save</button></div>}
           </div>
@@ -92,6 +87,85 @@ function OCR() {
           </tbody></table>
         </Card>
       </div>
+    </div>
+  )
+}
+
+const FOLDER_KINDS: { kind: FolderKind; title: string; sub: string }[] = [
+  { kind: 'none', title: 'None', sub: 'Documents live only in the app\'s data directory.' },
+  { kind: 'nextcloud', title: 'Nextcloud', sub: 'A folder in your Nextcloud: synced to your devices, with an Inbox you can drop scans into.' },
+  { kind: 'folder', title: 'Server folder', sub: 'A folder on this server: a NAS mount, a Syncthing folder.' },
+  { kind: 'webdav', title: 'WebDAV', sub: 'Any WebDAV server.' },
+]
+
+function Folder() {
+  const { data, reload } = useAsync(() => api.get<FolderInfo>(`${V1}/folder`), [])
+  const { toast } = useToast()
+  const { bump } = useApp()
+  const [f, setF] = useState({ kind: 'none' as FolderKind, path: '', url: '', user: '', password: '', folder: 'Documents', via_core: true, file: 'archive' as 'archive' | 'original', inbox: true, inbox_name: 'Inbox' })
+  const [test, setTest] = useState<{ where: string; files: number; folders: number; inbox_files: number } | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (data) setF({ kind: data.kind || 'none', path: data.path || (data.roots?.[0] ? `${data.roots[0]}` : ''), url: data.url, user: data.user, password: '', folder: data.folder || 'Documents', via_core: data.kind === 'nextcloud' ? data.via_core : !!data.core_nextcloud, file: data.file || 'archive', inbox: data.inbox, inbox_name: data.inbox_name || 'Inbox' })
+  }, [data])
+  if (!data) return <Loading />
+  const st = data.status || {}
+  const set = (p: Partial<typeof f>) => { setF({ ...f, ...p }); setTest(null) }
+  const runTest = async () => {
+    setBusy(true)
+    try { setTest(await api.post(`${V1}/folder/test`, f)) } catch (e) { toast((e as Error).message, 'err'); setTest(null) } finally { setBusy(false) }
+  }
+  const save = async () => {
+    setBusy(true)
+    try { await api.put(`${V1}/folder`, f); toast(f.kind === 'none' ? 'Saved' : 'Saved — writing your documents there in the background'); reload(); setTest(null); bump() } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) }
+  }
+  const act = async (fn: () => Promise<unknown>, msg: (r: unknown) => string) => { setBusy(true); try { const r = await fn(); toast(msg(r)); reload(); bump() } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) } }
+  return (
+    <div className="grid" style={{ gap: 16 }}>
+      <Card title="Your documents folder" actions={data.kind !== 'none' && <><button className="btn sm" disabled={busy} onClick={() => act(() => api.post(`${V1}/folder/inbox`), r => `Inbox checked: ${(r as { taken: number }).taken} taken`)}>Check the Inbox now</button><button className="btn sm" disabled={busy} onClick={() => act(() => api.post(`${V1}/folder/sync`), () => 'Writing every document (see Processing)')}>Write everything again</button></>}>
+        {data.kind === 'none' ? <p className="muted">No folder chosen. Your documents are only in the app's data directory on the server. Choose one below to have a readable copy of every document laid out by storage path, and an Inbox that feeds new files in.</p> : <>
+          <p><b>{st.where || '—'}</b> <span className="muted">· {data.file === 'original' ? 'originals' : 'PDF/A with text'} laid out by storage path{data.inbox ? `, new files taken from ${st.inbox_path || data.inbox_name}` : ''}</span></p>
+          {st.error ? <div className="callout danger">{st.error}</div> : st.inbox_error ? <div className="callout warning">Inbox: {st.inbox_error}</div> : <p className="muted small">Last written {st.last_write ? ago(st.last_write) : 'never'} · Inbox last looked at {st.last_inbox ? ago(st.last_inbox) : 'not yet'}{st.taken ? ` · ${st.taken} taken since the start` : ''}. The folder follows every rename, re-filing and deletion. The archive itself stays in the app; the folder is a copy you can browse, sync and search with any other tool.</p>}
+        </>}
+      </Card>
+      <Card title="Change the folder">
+        <div className="storage-kinds">
+          {FOLDER_KINDS.filter(k => k.kind !== 'folder' || (data.roots && data.roots.length)).map(k => (
+            <button key={k.kind} className={`storage-kind ${f.kind === k.kind ? 'active' : ''}`} onClick={() => set({ kind: k.kind })}><b>{k.title}</b><small className="muted">{k.sub}</small></button>
+          ))}
+        </div>
+        <div className="grid mt" style={{ gap: 14, maxWidth: 640 }}>
+          {f.kind === 'nextcloud' && <>
+            {data.core && <Field group label="Account"><Segmented value={f.via_core ? 'core' : 'own'} onChange={v => set({ via_core: v === 'core' })} options={[{ value: 'core', label: 'Through Pocket Core' }, { value: 'own', label: 'Type it in' }]} /></Field>}
+            {f.via_core && data.core ? (
+              data.core_nextcloud ? <p className="muted">Pocket Core connects you as <b>{data.core_nextcloud.user}</b> at {data.core_nextcloud.url}. Nothing to type.</p> : <div className="callout warning">Pocket Core has no Nextcloud account for you{data.core_nextcloud_error ? `: ${data.core_nextcloud_error}` : ''}. Add one in Core → Services, or type it in.</div>
+            ) : <>
+              <Field label="Nextcloud address"><input value={f.url} onChange={e => set({ url: e.target.value })} placeholder="https://cloud.example.com" spellCheck={false} /></Field>
+              <div className="two-col tight">
+                <Field label="Username"><input value={f.user} onChange={e => set({ user: e.target.value })} autoComplete="off" /></Field>
+                <Field label="App password" help="Nextcloud → Settings → Security → Devices & sessions."><input type="password" value={f.password} onChange={e => set({ password: e.target.value })} placeholder={data.password_set && data.kind === 'nextcloud' ? 'saved — type to replace' : ''} autoComplete="new-password" /></Field>
+              </div>
+            </>}
+            <Field label="Folder in your Nextcloud" help="Made when missing. The Nextcloud client syncs it to your computers; the phone app can upload scans straight into its Inbox."><input value={f.folder} onChange={e => set({ folder: e.target.value })} placeholder="Documents" /></Field>
+          </>}
+          {f.kind === 'webdav' && <>
+            <Field label="Address of the folder" help="The full WebDAV address of the folder that holds (or will hold) the documents."><input value={f.url} onChange={e => set({ url: e.target.value })} placeholder="https://dav.example.com/remote.php/webdav/Documents" spellCheck={false} /></Field>
+            <div className="two-col tight">
+              <Field label="Username"><input value={f.user} onChange={e => set({ user: e.target.value })} autoComplete="off" /></Field>
+              <Field label="Password"><input type="password" value={f.password} onChange={e => set({ password: e.target.value })} placeholder={data.password_set && data.kind === 'webdav' ? 'saved — type to replace' : ''} autoComplete="new-password" /></Field>
+            </div>
+          </>}
+          {f.kind === 'folder' && <Field label="Folder" help={<>Inside one of: {(data.roots || []).map(r => <code key={r}>{r}</code>)} (FOLDER_ROOTS). Mount a NAS share there and your archive is readable without this app.</>}><input value={f.path} onChange={e => set({ path: e.target.value })} placeholder={(data.roots || [])[0] || '/documents'} spellCheck={false} /></Field>}
+          {f.kind !== 'none' && <>
+            <Field label="Which file" group help="The PDF/A carries the OCR text and opens everywhere; originals are the untouched uploads (photos stay photos)."><Segmented value={f.file} onChange={v => set({ file: v })} options={[{ value: 'archive', label: 'PDF/A with text' }, { value: 'original', label: 'Original' }]} size="sm" /></Field>
+            <Toggle checked={f.inbox} onChange={v => set({ inbox: v })} label="Take new files from an Inbox sub-folder" />
+            {f.inbox && <Field label="Inbox folder name" help="Files dropped there become documents (sub-folders inside it become tags) and are removed from the Inbox once in; a file that is already in is removed too."><input value={f.inbox_name} onChange={e => set({ inbox_name: e.target.value })} placeholder="Inbox" style={{ maxWidth: 220 }} /></Field>}
+          </>}
+          {test && <div className="callout success">It answers: <b>{test.where}</b> holds {test.files} file{test.files === 1 ? '' : 's'} in {test.folders} folder{test.folders === 1 ? '' : 's'}{test.inbox_files ? `, ${test.inbox_files} of them waiting in the Inbox` : ''}.</div>}
+          <div className="row"><button className="btn" onClick={runTest} disabled={busy || f.kind === 'none'}>{busy ? 'Looking…' : 'Test'}</button><button className="btn primary" onClick={save} disabled={busy}>Use this</button></div>
+          <p className="muted small">Switching folders leaves the old one as it is. Files placed by the app in a previous folder are not removed.</p>
+        </div>
+      </Card>
     </div>
   )
 }

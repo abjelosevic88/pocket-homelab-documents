@@ -226,21 +226,51 @@ func TestRulesBulkAndViews(t *testing.T) {
 	if dash.Documents != 2 || len(dash.Views) != 1 || dash.Views[0].Count != 2 {
 		t.Errorf("dashboard: %+v", dash)
 	}
-	// mirror folder follows the storage path
+	// the documents folder follows the storage path, renames with the title and takes files from its Inbox
 	var sp store.Named
 	h.do(tok, "POST", "/api/v1/storage_paths", map[string]any{"name": "By correspondent", "path": "{correspondent}/{created_year}/{title}"}, &sp)
-	_ = h.st.SaveBoxSettings(context.Background(), func() store.Settings { s, _ := h.st.GetSettings(context.Background(), 0); s.Mirror = true; return s }())
+	root := filepath.Join(h.dir, "mirror")
+	if code := h.do(tok, "PUT", "/api/v1/folder", map[string]any{"kind": "folder", "path": root, "file": "original", "inbox": true, "inbox_name": "Inbox"}, nil); code != 200 {
+		t.Fatalf("set folder: %d", code)
+	}
+	h.drain() // folder_sync
 	h.do(tok, "PUT", "/api/v1/documents/"+itoa(d.ID), map[string]any{"storage_path": sp.ID}, nil)
-	want := filepath.Join(h.dir, "mirror", "IKEA", "2026", "IKEA 2026-05-12.txt")
+	want := filepath.Join(root, "IKEA", "2026", "IKEA 2026-05-12.txt")
 	if _, err := os.Stat(want); err != nil {
-		t.Errorf("mirror file missing: %s", want)
+		t.Errorf("folder file missing: %s", want)
 	}
 	h.do(tok, "PUT", "/api/v1/documents/"+itoa(d.ID), map[string]any{"title": "IKEA sofa"}, nil)
 	if _, err := os.Stat(want); err == nil {
-		t.Errorf("old mirror file not removed after rename")
+		t.Errorf("old folder file not removed after rename")
 	}
-	if _, err := os.Stat(filepath.Join(h.dir, "mirror", "IKEA", "2026", "IKEA sofa.txt")); err != nil {
-		t.Errorf("renamed mirror file missing")
+	if _, err := os.Stat(filepath.Join(root, "IKEA", "2026", "IKEA sofa.txt")); err != nil {
+		t.Errorf("renamed folder file missing")
+	}
+	if _, err := os.Stat(filepath.Join(root, "Inbox")); err != nil {
+		t.Errorf("inbox folder not made")
+	}
+	_ = os.MkdirAll(filepath.Join(root, "Inbox", "Bank"), 0o755)
+	_ = os.WriteFile(filepath.Join(root, "Inbox", "Bank", "statement.txt"), []byte("Bank statement May 2026"), 0o644)
+	var took map[string]int
+	if code := h.do(tok, "POST", "/api/v1/folder/inbox", nil, &took); code != 200 || took["taken"] != 1 {
+		t.Fatalf("inbox: %d %v", code, took)
+	}
+	h.drain()
+	var l2 listOut
+	h.do(tok, "GET", "/api/v1/documents?q=statement", nil, &l2)
+	if l2.Count != 1 || l2.Results[0].Source != "folder" || len(l2.Results[0].Tags) != 2 {
+		t.Fatalf("inbox document: %+v", l2.Results)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Inbox", "Bank", "statement.txt")); err == nil {
+		t.Errorf("taken file still in the inbox")
+	}
+	if _, err := os.Stat(filepath.Join(root, "2026", "statement.txt")); err != nil {
+		t.Errorf("taken document not written back into the folder")
+	}
+	// trash removes the copy
+	h.do(tok, "DELETE", "/api/v1/documents/"+itoa(d.ID), nil, nil)
+	if _, err := os.Stat(filepath.Join(root, "IKEA", "2026", "IKEA sofa.txt")); err == nil {
+		t.Errorf("folder copy still there after delete")
 	}
 }
 
