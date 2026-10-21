@@ -26,10 +26,12 @@ var linkOffers = []core.Offer{
 	{Scope: "documents:write", Name: "Add and file documents", Description: "Upload documents, change their title, tags, correspondent, type, date and custom fields, add notes."},
 }
 
-// linkUses: a document (an invoice, a receipt) can be booked as a transaction in Pocket Money.
+// linkUses: a document (an invoice, a receipt) can be booked as a transaction
+// in Pocket Money; the documents folder can live in Pocket Files.
 var linkUses = []core.Use{
 	{App: "money", Scopes: []string{"accounts:read", "transactions:write"}, Reason: "Book an invoice or receipt as a transaction in Pocket Money, with a link back to the document"},
 	{App: "collaborator", Scopes: []string{"reviews:read", "reviews:write"}, Reason: "Send a document's PDF for review in Pocket Collaborator, and show which documents are in review"},
+	{App: "files", Scopes: []string{"files:read", "files:write"}, Reason: "Keep a readable copy of your documents in Pocket Files and take new ones from its Inbox folder"},
 }
 
 type linkRoute struct {
@@ -99,7 +101,8 @@ func linkAppOf(r *http.Request) string {
 	return "a linked app"
 }
 
-// reportModes tells Core how each person reaches Money (Core → Links shows it).
+// reportModes tells Core how each person reaches Money, Nextcloud and Pocket
+// Files (Core → Links shows it).
 func (s *Server) reportModes(ctx context.Context) {
 	if !s.core.Configured() {
 		return
@@ -124,6 +127,11 @@ func (s *Server) reportModes(ctx context.Context) {
 			}
 		}
 		modes = append(modes, core.ConnMode{User: u.Email, Target: "service:nextcloud", Mode: nc})
+		files := "off"
+		if st.FolderKind == "files" {
+			files = "core"
+		}
+		modes = append(modes, core.ConnMode{User: u.Email, Target: "files", Mode: files})
 	}
 	c, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

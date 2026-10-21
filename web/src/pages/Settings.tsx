@@ -110,6 +110,7 @@ function OCR() {
 
 const FOLDER_KINDS: { kind: FolderKind; title: string; sub: string }[] = [
   { kind: 'none', title: 'None', sub: 'Documents live only in the app\'s data directory.' },
+  { kind: 'files', title: 'Pocket Files', sub: 'A folder in your Pocket Files, through Pocket Core: nothing to type, with an Inbox you can drop scans into.' },
   { kind: 'nextcloud', title: 'Nextcloud', sub: 'A folder in your Nextcloud: synced to your devices, with an Inbox you can drop scans into.' },
   { kind: 'folder', title: 'Server folder', sub: 'A folder on this server: a NAS mount, a Syncthing folder.' },
   { kind: 'webdav', title: 'WebDAV', sub: 'Any WebDAV server.' },
@@ -147,7 +148,7 @@ function Folder() {
       </Card>
       <Card title="Change the folder">
         <div className="storage-kinds">
-          {FOLDER_KINDS.filter(k => k.kind !== 'folder' || (data.roots && data.roots.length)).map(k => (
+          {FOLDER_KINDS.filter(k => (k.kind !== 'folder' || (data.roots && data.roots.length)) && (k.kind !== 'files' || data.core)).map(k => (
             <button key={k.kind} className={`storage-kind ${f.kind === k.kind ? 'active' : ''}`} onClick={() => set({ kind: k.kind })}><b>{k.title}</b><small className="muted">{k.sub}</small></button>
           ))}
         </div>
@@ -164,6 +165,10 @@ function Folder() {
               </div>
             </>}
             <Field label="Folder in your Nextcloud" help="Made when missing. The Nextcloud client syncs it to your computers; the phone app can upload scans straight into its Inbox."><input value={f.folder} onChange={e => set({ folder: e.target.value })} placeholder="Documents" /></Field>
+          </>}
+          {f.kind === 'files' && <>
+            {data.core_files ? <p className="muted">Pocket Core lets this app into your Pocket Files{data.core_files_url ? <> at {data.core_files_url}</> : null}, as you and only you. Nothing to type.</p> : <div className="callout warning">Pocket Files cannot be reached through Pocket Core{data.core_files_error ? `: ${data.core_files_error}` : ''}. Turn the Documents → Files link on in Core (Links, or Settings → Apps acting for me).</div>}
+            <Field label="Folder in your Pocket Files" help="Made when missing. Drop scans into its Inbox from the Pocket Files page or any WebDAV client."><input value={f.folder} onChange={e => set({ folder: e.target.value })} placeholder="Documents" /></Field>
           </>}
           {f.kind === 'webdav' && <>
             <Field label="Address of the folder" help="The full WebDAV address of the folder that holds (or will hold) the documents."><input value={f.url} onChange={e => set({ url: e.target.value })} placeholder="https://dav.example.com/remote.php/webdav/Documents" spellCheck={false} /></Field>

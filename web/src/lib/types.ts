@@ -104,12 +104,13 @@ export interface Settings {
   ocr_workers: number
 }
 
-export type FolderKind = 'none' | 'folder' | 'webdav' | 'nextcloud'
+export type FolderKind = 'none' | 'folder' | 'webdav' | 'nextcloud' | 'files'
 export interface FolderStatus { where?: string; kind?: FolderKind; error?: string; last_write?: string; last_inbox?: string; inbox_error?: string; taken?: number; inbox_path?: string }
 export interface FolderInfo {
   kind: FolderKind; path: string; url: string; user: string; folder: string; via_core: boolean; password_set: boolean
   file: 'archive' | 'original'; inbox: boolean; inbox_name: string
   roots: string[] | null; core: boolean; core_nextcloud?: { url: string; user: string }; core_nextcloud_error?: string
+  core_files?: boolean; core_files_error?: string; core_files_url?: string
   status: FolderStatus
 }
 

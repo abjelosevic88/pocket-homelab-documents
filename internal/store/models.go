@@ -283,15 +283,15 @@ type Settings struct {
 	BarcodeMaxPages  int    `json:"barcode_max_pages"`
 
 	// The person's documents folder: a readable copy of the archive laid out
-	// by storage path, on this server, a WebDAV server or their Nextcloud,
-	// whose Inbox sub-folder feeds new files in.
-	FolderKind      string `json:"folder_kind"` // none | folder | webdav | nextcloud
+	// by storage path, on this server, a WebDAV server, their Nextcloud or
+	// their Pocket Files, whose Inbox sub-folder feeds new files in.
+	FolderKind      string `json:"folder_kind"` // none | folder | webdav | nextcloud | files
 	FolderPath      string `json:"folder_path"` // folder: absolute path on the server
 	FolderURL       string `json:"folder_url"`  // webdav: the folder's address; nextcloud: the server
 	FolderUser      string `json:"folder_user"`
 	FolderPassword  string `json:"-"`
-	FolderName      string `json:"folder_name"`     // nextcloud: the folder inside the person's files
-	FolderViaCore   bool   `json:"folder_via_core"` // nextcloud: account from Pocket Core
+	FolderName      string `json:"folder_name"`     // nextcloud, files: the folder inside the person's files
+	FolderViaCore   bool   `json:"folder_via_core"` // nextcloud: account from Pocket Core (files: always)
 	FolderFile      string `json:"folder_file"`     // archive | original
 	FolderInbox     bool   `json:"folder_inbox"`    // take new files from <folder>/<inbox name>
 	FolderInboxName string `json:"folder_inbox_name"`

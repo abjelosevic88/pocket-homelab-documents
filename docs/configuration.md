@@ -56,7 +56,7 @@ Everything is an environment variable; every one has a default, so `docker run` 
 
 | Variable | Default | Notes |
 |---|---|---|
-| `CORE_URL` | – | With a Pocket Core on the box the app registers itself on start, publishes `documents.*` events, accepts the tokens Core hands to paired phones, offers "Sign in with Pocket Core" with no OIDC configuration, and books in Pocket Money through an app link. |
+| `CORE_URL` | – | With a Pocket Core on the box the app registers itself on start, publishes `documents.*` events, accepts the tokens Core hands to paired phones, offers "Sign in with Pocket Core" with no OIDC configuration, books in Pocket Money and keeps the documents folder in Pocket Files through app links. |
 | `CORE_REGISTRATION_KEY` | – | From Core's Settings page. |
 | `CORE_APP_URL` | `BASE_URL` | How Core reaches this app (e.g. `http://host.docker.internal:8183`). |
 
@@ -85,7 +85,9 @@ Settings → Mail: IMAP accounts and rules, like Paperless'. A rule says which f
 
 ## The documents folder
 
-Each person may choose, in Settings → Documents folder, a place the app keeps in step with their archive: **None**, a **server folder** (one of `FOLDER_ROOTS`), **Nextcloud** (their account through Pocket Core, or an address + app password typed in; a folder inside their files, `Documents` by default) or any **WebDAV** server. There the app writes one file per document (the PDF/A with its text layer, or the original), laid out by storage path, and renames, re-files and removes it as the document changes. Its **Inbox** sub-folder works the other way: files dropped there (from the Nextcloud phone app, a synced folder, a scanner) become documents and are removed from the Inbox once in; sub-folders of the Inbox become tags. The archive itself always stays under `DATA_DIR`: that is what OCR, previews and backups use. Credentials typed in are stored in the database; the ones from Pocket Core are asked for on every use and never stored.
+Each person may choose, in Settings → Documents folder, a place the app keeps in step with their archive: **None**, a **server folder** (one of `FOLDER_ROOTS`), **Pocket Files** (through Pocket Core only: a folder inside their files, `Documents` by default), **Nextcloud** (their account through Pocket Core, or an address + app password typed in; a folder inside their files, `Documents` by default) or any **WebDAV** server. There the app writes one file per document (the PDF/A with its text layer, or the original), laid out by storage path, and renames, re-files and removes it as the document changes. Its **Inbox** sub-folder works the other way: files dropped there (from the Nextcloud phone app, a synced folder, a scanner) become documents and are removed from the Inbox once in; sub-folders of the Inbox become tags. The archive itself always stays under `DATA_DIR`: that is what OCR, previews and backups use. Credentials typed in are stored in the database; the ones from Pocket Core are asked for on every use and never stored.
+
+**Pocket Files** is reached with a Core app link (`files:read` + `files:write`, declared in the manifest, so Core creates it on registration): for each person the app asks Core for a short-lived `pcx_` token for that person only and talks WebDAV to `<files url>/dav/<folder>` with it as the password; a token is used for at most four minutes, then a new one is asked for. Switching the link off in Core (Links, or the person's Settings → Apps acting for me) stops the folder at once, and Settings → Documents folder says why. Without `CORE_URL` the choice is not offered. Copies the app removes go to the person's Pocket Files trash; documents taken from its Inbox get the source *Pocket Files Inbox*.
 
 ## CLI
 

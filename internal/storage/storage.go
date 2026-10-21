@@ -40,7 +40,7 @@ type Entry struct {
 
 // Backend is one storage location.
 type Backend interface {
-	// Kind names the backend: builtin | folder | webdav | nextcloud.
+	// Kind names the backend: builtin | folder | webdav | nextcloud | files.
 	Kind() string
 	// Describe says where the folder is, for people ("Nextcloud · Documents").
 	Describe() string

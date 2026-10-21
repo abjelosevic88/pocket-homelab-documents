@@ -68,7 +68,7 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 		case "trash_days":
 			st.TrashDays = atoi(v, st.TrashDays)
 		case "folder_kind":
-			if v == "none" || v == "folder" || v == "webdav" || v == "nextcloud" {
+			if v == "none" || v == "folder" || v == "webdav" || v == "nextcloud" || v == "files" {
 				st.FolderKind = v
 			}
 		case "folder_path":

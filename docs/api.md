@@ -57,8 +57,8 @@ Matching algorithms: `0` none, `1` any word, `2` all words, `3` exact phrase, `4
 
 | | |
 | --- | --- |
-| `GET /folder` | `{kind, path, url, user, folder, via_core, password_set, file, inbox, inbox_name, roots, core, core_nextcloud?, status: {where, last_write, last_inbox, taken, error?, inbox_error?}}` |
-| `PUT /folder {kind: none\|folder\|webdav\|nextcloud, path, url, user, password, folder, via_core, file: archive\|original, inbox, inbox_name}` | tests the place, saves, and queues writing every document there |
+| `GET /folder` | `{kind, path, url, user, folder, via_core, password_set, file, inbox, inbox_name, roots, core, core_nextcloud?, core_files?, core_files_error?, core_files_url?, status: {kind, where, last_write, last_inbox, taken, error?, inbox_error?}}` (`core_files`: whether the Documents → Files link works for you) |
+| `PUT /folder {kind: none\|folder\|webdav\|nextcloud\|files, path, url, user, password, folder, via_core, file: archive\|original, inbox, inbox_name}` | tests the place, saves, and queues writing every document there |
 | `POST /folder/test {…the same}` | `{where, files, folders, inbox_files}` |
 | `POST /folder/sync` · `POST /folder/inbox` | write everything again · look into the Inbox now |
 

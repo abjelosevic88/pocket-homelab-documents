@@ -20,7 +20,7 @@ import (
 )
 
 // The documents folder: each person may point the app at a folder on this
-// server, a WebDAV server or their Nextcloud. The app keeps a readable copy
+// server, a WebDAV server, their Nextcloud or their Pocket Files. The app keeps a readable copy
 // of every document there (the PDF/A or the original, laid out by storage
 // path), renames and removes it as the document changes, and takes new files
 // from the folder's Inbox. The archive itself stays in DATA_DIR: that is
@@ -28,6 +28,58 @@ import (
 
 // serviceUses is what the app asks Pocket Core for: the person's Nextcloud account.
 var serviceUses = []core.ServiceUse{{Type: "nextcloud", Reason: "Keep your documents folder in your Nextcloud and take new files from its Inbox"}}
+
+// filesScopes is what the app asks Pocket Files for, through a Core app link
+// (linkUses): read the folder and its Inbox, write the copies.
+var filesScopes = []string{"files:read", "files:write"}
+
+// filesTokenReuse is how long one link token serves Pocket Files requests.
+// Tokens live five minutes; a fresh one is asked for well before that, and
+// Core re-checks the person's and the admin's switches each time.
+var filesTokenReuse = 4 * time.Minute
+
+// filesLinkErr words Core refusing the Documents → Files link like the other links.
+func filesLinkErr(err error) error {
+	var le *core.LinkError
+	if errors.As(err, &le) {
+		return errors.New("Pocket Files through Pocket Core: " + firstNonEmpty(strings.ReplaceAll(linkReason(le.Reason), "Money", "Files"), le.Message))
+	}
+	return err
+}
+
+// filesCreds answers the WebDAV credentials for one person's Pocket Files: any
+// user name and a pcx_ token Core issued for that person (and no one else),
+// reused for less than its life and asked for anew after that.
+func (s *Server) filesCreds(email string, first *core.LinkToken) storage.Credentials {
+	var mu sync.Mutex
+	lt, at := first, time.Now()
+	return func(ctx context.Context) (string, string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if lt != nil && time.Since(at) < filesTokenLife(lt) {
+			return "pocket-documents", lt.AccessToken, nil
+		}
+		fresh, err := s.core.ActAs(ctx, email, "files", filesScopes...)
+		if err != nil {
+			lt = nil
+			return "", "", filesLinkErr(err)
+		}
+		lt, at = fresh, time.Now()
+		return "pocket-documents", lt.AccessToken, nil
+	}
+}
+
+// filesTokenLife is how long a link token is used: filesTokenReuse, and a
+// minute less than Core says it lives when that is shorter.
+func filesTokenLife(lt *core.LinkToken) time.Duration {
+	reuse := filesTokenReuse
+	if lt.ExpiresIn > 0 {
+		if life := time.Duration(lt.ExpiresIn)*time.Second - time.Minute; life < reuse {
+			reuse = life
+		}
+	}
+	return reuse
+}
 
 type docFolder struct {
 	uid                  int64
@@ -135,6 +187,27 @@ func (s *Server) backendFor(ctx context.Context, uid int64, st store.Settings) (
 			return nil, errors.New("Nextcloud needs its address and your username")
 		}
 		b, err := storage.NewNextcloud(server, user, folder, creds)
+		if err != nil {
+			return nil, err
+		}
+		b.UserAgent = ua
+		return b, nil
+	case "files":
+		if !s.core.Configured() {
+			return nil, errors.New("there is no Pocket Core on this box; Pocket Files is reached through it")
+		}
+		email := s.userEmail(ctx, uid)
+		if email == "" {
+			return nil, errors.New("Pocket Files needs your email to ask Pocket Core for you")
+		}
+		lt, err := s.core.ActAs(ctx, email, "files", filesScopes...)
+		if err != nil {
+			return nil, filesLinkErr(err)
+		}
+		if lt.URL == "" {
+			return nil, errors.New("Pocket Core gave no address for Pocket Files")
+		}
+		b, err := storage.NewPocketFiles(strings.TrimRight(lt.URL, "/")+"/dav", firstNonEmpty(st.FolderName, "Documents"), s.filesCreds(email, lt))
 		if err != nil {
 			return nil, err
 		}
@@ -424,8 +497,8 @@ func (s *Server) checkInbox(ctx context.Context, uid int64) (taken int, err erro
 			}
 		}
 		source := "folder"
-		if b.Kind() == "nextcloud" {
-			source = "nextcloud"
+		if k := b.Kind(); k == "nextcloud" || k == "files" {
+			source = k
 		}
 		d, err := s.ingest(ctx, uid, incoming{Path: tmp, Name: name, Source: source, Actor: b.Describe() + " · " + inbox, SubDirs: subs})
 		var dup *ErrDuplicate
@@ -516,12 +589,14 @@ func (in folderInput) apply(cur store.Settings) (store.Settings, error) {
 				return st, errors.New("your Nextcloud username is needed")
 			}
 		}
+	case "files":
+		st.FolderViaCore = true // Pocket Files is only reached through Core
 	default:
 		return st, errors.New("unknown folder kind")
 	}
 	if f, err := storage.Clean(strings.TrimSpace(in.Folder)); err == nil && f != "" {
 		st.FolderName = f
-	} else if in.Kind == "nextcloud" {
+	} else if in.Kind == "nextcloud" || in.Kind == "files" {
 		st.FolderName = "Documents"
 	}
 	if in.File == "original" {
@@ -539,6 +614,9 @@ func (in folderInput) apply(cur store.Settings) (store.Settings, error) {
 		st.FolderPassword = in.Password
 	} else if cur.FolderKind != in.Kind || cur.FolderURL != st.FolderURL {
 		st.FolderPassword = ""
+	}
+	if st.FolderKind == "files" {
+		st.FolderPassword = "" // the token comes from Core on every use
 	}
 	return st, nil
 }
@@ -561,10 +639,20 @@ func (s *Server) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 	if s.core.Configured() {
 		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		if cred, err := s.core.ServiceForFresh(cctx, s.userEmail(ctx, uid), "nextcloud"); err == nil {
+		email := s.userEmail(ctx, uid)
+		if cred, err := s.core.ServiceForFresh(cctx, email, "nextcloud"); err == nil {
 			out["core_nextcloud"] = map[string]any{"url": firstNonEmpty(cred.PublicURL, cred.URL), "user": cred.Fields["USERNAME"]}
 		} else {
 			out["core_nextcloud_error"] = err.Error()
+		}
+		// Pocket Files: whether the Documents → Files link works for this person
+		on, why := s.core.LinkOn(cctx, email, "files", filesScopes...)
+		out["core_files"] = on
+		if !on {
+			out["core_files_error"] = firstNonEmpty(strings.ReplaceAll(linkReason(why), "Money", "Files"), why)
+		}
+		if res, err := s.core.Resolve(cctx, "files"); err == nil && res != nil {
+			out["core_files_url"] = firstNonEmpty(res.PublicURL, res.URL)
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

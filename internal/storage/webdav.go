@@ -39,6 +39,7 @@ type WebDAV struct {
 	HTTP      *http.Client
 	UserAgent string
 
+	kind     string // set by NewPocketFiles
 	basePath string // decoded path of Base, for reading hrefs
 }
 
@@ -78,7 +79,31 @@ func NewNextcloud(server, user, folder string, creds Credentials) (*WebDAV, erro
 	return w, nil
 }
 
+// NewPocketFiles returns a backend for folder (a path inside the person's
+// home, "Documents" or "Papers/Archive") in Pocket Files, whose WebDAV root
+// (davRoot, "<files url>/dav") is the person's home. The credentials are a
+// Core link token as the password (docs/webdav.md in pocket-homelab-files).
+func NewPocketFiles(davRoot, folder string, creds Credentials) (*WebDAV, error) {
+	davRoot = strings.TrimRight(strings.TrimSpace(davRoot), "/")
+	folder, err := Clean(folder)
+	if err != nil {
+		return nil, err
+	}
+	if folder == "" {
+		return nil, errors.New("Pocket Files needs a folder inside your files, not the whole of them")
+	}
+	w, err := NewWebDAV(davRoot+"/"+escapePath(folder), creds, "Pocket Files · "+folder)
+	if err != nil {
+		return nil, err
+	}
+	w.kind, w.MkBase, w.MkPath = "files", davRoot, folder
+	return w, nil
+}
+
 func (w *WebDAV) Kind() string {
+	if w.kind != "" {
+		return w.kind
+	}
 	if w.Nextcloud {
 		return "nextcloud"
 	}
