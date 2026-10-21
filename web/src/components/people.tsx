@@ -1,6 +1,6 @@
 import type { User } from '../lib/types'
-import { colorFor, initials } from '../lib/format'
-export function Avatar({ user, size = '' }: { user: User; size?: '' | 'lg' }) {
-  const name = user.name || user.email
-  return <span className={`avatar ${size}`} style={{ background: colorFor(user.id) }} title={name}>{initials(name)}</span>
+import { colorFor } from '../lib/format'
+import { Avatar as Base } from './ui'
+export function Avatar({ user, size = 26 }: { user: User; size?: number }) {
+  return <span title={user.name || user.email} style={{ display: 'inline-flex' }}><Base name={user.name} email={user.email} size={size} color={colorFor(user.id)} /></span>
 }

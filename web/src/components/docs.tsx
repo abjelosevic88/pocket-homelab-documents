@@ -1,18 +1,20 @@
 import { Link } from 'react-router-dom'
 import type { Document, Tag } from '../lib/types'
 import { V1 } from '../lib/api'
-import { bytes, fileIcon, fmtDate, inkFor, snippetParts } from '../lib/format'
+import { bytes, fileIconName, fmtDate, inkFor, snippetParts } from '../lib/format'
 import { useApp } from '../lib/app-context'
+import { Icon } from './icons'
 
 export function TagChip({ tag, onClick, small }: { tag: Tag; onClick?: () => void; small?: boolean }) {
   const style = { background: tag.color, color: inkFor(tag.color), borderColor: tag.color }
-  if (onClick) return <button type="button" className={`chip-tag ${small ? 'sm' : ''}`} style={style} onClick={onClick}>{tag.is_inbox && '⌾ '}{tag.name}</button>
-  return <span className={`chip-tag ${small ? 'sm' : ''}`} style={style}>{tag.is_inbox && '⌾ '}{tag.name}</span>
+  const inbox = tag.is_inbox ? <Icon name="inbox" size={small ? 11 : 12} strokeWidth={2.2} /> : null
+  if (onClick) return <button type="button" className={`chip-tag ${small ? 'sm' : ''}`} style={style} onClick={onClick}>{inbox}{tag.name}</button>
+  return <span className={`chip-tag ${small ? 'sm' : ''}`} style={style}>{inbox}{tag.name}</span>
 }
 
 export function TagList({ ids, small, max = 6, names }: { ids: number[]; small?: boolean; max?: number; names?: string[] }) {
   const { tax } = useApp()
-  if (names) return <span className="tag-list">{names.slice(0, max).map(n => <span key={n} className={`chip-tag ${small ? 'sm' : ''}`} style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text)' }}>{n}</span>)}</span>
+  if (names) return <span className="tag-list">{names.slice(0, max).map(n => <span key={n} className={`chip-tag plain ${small ? 'sm' : ''}`}>{n}</span>)}</span>
   const tags = ids.map(id => tax.tags.find(t => t.id === id)).filter(Boolean) as Tag[]
   return <span className="tag-list">{tags.slice(0, max).map(t => <TagChip key={t.id} tag={t} small={small} />)}{tags.length > max && <span className="muted small">+{tags.length - max}</span>}</span>
 }
@@ -28,11 +30,14 @@ export function Thumb({ d, size = 'md' }: { d: Document; size?: 'sm' | 'md' | 'l
   return (
     <span className={`thumb ${size}`}>
       {canThumb ? <img src={`${V1}/documents/${d.id}/thumb?v=${encodeURIComponent(d.modified_at)}`} alt="" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} /> : null}
-      <span className="thumb-fallback">{fileIcon(d.mime, d.original_name)}</span>
+      <span className="thumb-fallback"><Icon name={fileIconName(d.mime, d.original_name)} size={size === 'sm' ? 16 : size === 'md' ? 24 : 36} strokeWidth={1.5} /></span>
       {d.page_count > 1 && <span className="pages">{d.page_count}</span>}
     </span>
   )
 }
+
+/** The filled star of a favourite. */
+export function Star({ size = 13 }: { size?: number }) { return <span className="star" title="Favourite"><Icon name="star" size={size} /></span> }
 
 export function Snippet({ s }: { s: string }) {
   return <span className="snippet">{snippetParts(s).map((p, i) => p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>)}</span>
@@ -47,9 +52,9 @@ export function DocCard({ d, selected, onSelect, onOpen }: { d: Document; select
       {onSelect && <label className="sel" onClick={e => e.stopPropagation()}><input type="checkbox" checked={!!selected} onChange={() => {}} onClick={onSelect} /></label>}
       <Link to={`/documents/${d.id}`} className="doc-thumb" onClick={e => { if (onOpen) { e.preventDefault(); onOpen() } }}><Thumb d={d} size="lg" /></Link>
       <div className="doc-body">
-        <Link to={`/documents/${d.id}`} className="doc-title" title={d.title}>{d.favorite && <span className="star">★</span>}<StatusDot d={d} />{d.title}</Link>
+        <Link to={`/documents/${d.id}`} className="doc-title" title={d.title}>{d.favorite && <Star />}<StatusDot d={d} />{d.title}</Link>
         <ReviewBadge review={review} small />
-        <div className="muted small ellipsis">{d.owner_name && <span className="badge cat" style={{ marginRight: 4 }}>⇄ {d.owner_name}</span>}{d.correspondent_name || <span className="muted">—</span>}{d.document_type_name && <> · {d.document_type_name}</>}</div>
+        <div className="muted small ellipsis">{d.owner_name && <span className="badge cat" style={{ marginRight: 4 }}><Icon name="share" size={11} />{d.owner_name}</span>}{d.correspondent_name || <span className="muted">—</span>}{d.document_type_name && <> · {d.document_type_name}</>}</div>
         {d.snippet ? <div className="small doc-snippet"><Snippet s={d.snippet} /></div> : null}
         <div className="doc-foot"><span className="muted small">{fmtDate(d.created)}</span><TagList ids={d.tags} names={d.shared_tags} small max={3} /></div>
       </div>
@@ -64,7 +69,7 @@ export function DocRow({ d, selected, onSelect, cols }: { d: Document; selected?
     switch (c) {
       case 'asn': return <td className="mono muted num">{d.asn ?? ''}</td>
       case 'correspondent': return <td className="ellipsis">{d.correspondent_name}</td>
-      case 'title': return <td className="title-cell"><Link to={`/documents/${d.id}`}>{d.favorite && <span className="star">★</span>}<StatusDot d={d} />{d.title}</Link>{d.owner_name && <span className="badge cat" style={{ marginLeft: 6 }}>⇄ {d.owner_name}</span>}<ReviewBadge review={review} small />{d.snippet && <div className="small doc-snippet"><Snippet s={d.snippet} /></div>}</td>
+      case 'title': return <td className="title-cell"><Link to={`/documents/${d.id}`}>{d.favorite && <Star />}<StatusDot d={d} />{d.title}</Link>{d.owner_name && <span className="badge cat" style={{ marginLeft: 6 }}><Icon name="share" size={11} />{d.owner_name}</span>}<ReviewBadge review={review} small />{d.snippet && <div className="small doc-snippet"><Snippet s={d.snippet} /></div>}</td>
       case 'type': return <td className="ellipsis">{d.document_type_name}</td>
       case 'tags': return <td><TagList ids={d.tags} names={d.shared_tags} small max={4} /></td>
       case 'created': return <td className="muted nowrap">{fmtDate(d.created)}</td>

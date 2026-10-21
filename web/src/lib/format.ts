@@ -108,3 +108,13 @@ export function docsURL(q: Record<string, unknown>): string {
   const s = p.toString()
   return '/documents' + (s ? '?' + s : '')
 }
+
+/** The stroke icon for a file type (the UI chrome uses icons, not emoji). */
+export function fileIconName(mime: string, name = ''): string {
+  if (mime === 'application/pdf' || /\.pdf$/i.test(name)) return 'file-text'
+  if (mime.startsWith('image/')) return 'image'
+  if (/sheet|excel|ods|csv/.test(mime) || /\.(xlsx?|ods|csv)$/i.test(name)) return 'sheet'
+  if (/presentation|powerpoint|odp/.test(mime) || /\.(pptx?|odp)$/i.test(name)) return 'slides'
+  if (mime === 'message/rfc822') return 'mail'
+  return 'file-text'
+}

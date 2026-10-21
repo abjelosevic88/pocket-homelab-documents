@@ -3,6 +3,8 @@ import { api, V1 } from './api'
 import { setDateFormat } from './format'
 import type { Settings, Taxonomy, User } from './types'
 
+export type ThemeMode = 'system' | 'light' | 'dark'
+
 interface AuthStatus { needs_setup: boolean; auth_mode: string; authenticated: boolean; user: User | null; version: string; title: string; oidc?: boolean; oidc_name?: string }
 interface AppState {
   status: AuthStatus | null
@@ -10,7 +12,9 @@ interface AppState {
   settings: Settings | null
   users: User[]
   tax: Taxonomy
+  themeMode: ThemeMode
   theme: 'light' | 'dark'
+  setThemeMode: (m: ThemeMode) => void
   toggleTheme: () => void
   refresh: () => Promise<void>
   reloadTax: () => Promise<void>
@@ -32,9 +36,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tax, setTax] = useState<Taxonomy>(empty)
   const [stamp, setStamp] = useState('')
   const [queue, setQueue] = useState({ queued: 0, running: 0 })
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('pd-theme') as 'light' | 'dark') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
+  // Theme follows the system unless set to light or dark (the old "pd-theme" key was written on every visit, so it is not a choice).
+  const [themeMode, setThemeModeRaw] = useState<ThemeMode>(() => (localStorage.getItem('pd-theme-mode') as ThemeMode) || 'system')
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  useEffect(() => {
+    localStorage.removeItem('pd-theme')
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const h = () => setSystemDark(mq.matches)
+    mq.addEventListener('change', h)
+    return () => mq.removeEventListener('change', h)
+  }, [])
+  const theme: 'light' | 'dark' = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', theme === 'dark' ? '#111113' : '#ffffff'))
+  }, [theme])
+  const setThemeMode = useCallback((m: ThemeMode) => { setThemeModeRaw(m); if (m === 'system') localStorage.removeItem('pd-theme-mode'); else localStorage.setItem('pd-theme-mode', m) }, [])
   const lastStamp = useRef('')
-  useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('pd-theme', theme) }, [theme])
   useEffect(() => { if (settings?.title) document.title = settings.title }, [settings?.title])
   const setSettings = useCallback((s: Settings) => { setSettingsRaw(s); setDateFormat(s.date_format) }, [])
   const reloadTax = useCallback(async () => {
@@ -76,5 +94,5 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => { stop = true; clearInterval(id); document.removeEventListener('visibilitychange', vis) }
   }, [user])
   const bump = useCallback(() => setStamp(s => s + '.'), [])
-  return <Ctx.Provider value={{ status, user, settings, users, tax, theme, toggleTheme: () => setTheme(t => t === 'dark' ? 'light' : 'dark'), refresh, reloadTax, setUser, setSettings, stamp, queue, bump }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ status, user, settings, users, tax, themeMode, theme, setThemeMode, toggleTheme: () => setThemeMode(theme === 'dark' ? 'light' : 'dark'), refresh, reloadTax, setUser, setSettings, stamp, queue, bump }}>{children}</Ctx.Provider>
 }

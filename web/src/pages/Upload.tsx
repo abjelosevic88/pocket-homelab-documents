@@ -6,6 +6,7 @@ import { uploadFiles, type UploadItem } from '../lib/upload'
 import { bytes } from '../lib/format'
 import { Card, Field, PageHeader, useToast } from '../components/ui'
 import { Picker } from '../components/Picker'
+import { Icon } from '../components/icons'
 
 export default function Upload() {
   const { tax, settings, reloadTax, bump } = useApp()
@@ -38,25 +39,25 @@ export default function Upload() {
       <div className="upload-grid">
         <div>
           <div className={`dropzone ${over ? 'over' : ''}`} onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={e => { e.preventDefault(); setOver(false); add(e.dataTransfer.files) }} onClick={() => input.current?.click()}>
-            <div className="dz-ico">⇡</div>
+            <div className="dz-ico"><Icon name="upload" size={24} /></div>
             <div><b>Drop files here</b> or click to choose</div>
             <div className="muted small">PDF, JPG, PNG, TIFF, WEBP, HEIC · DOCX, XLSX, PPTX, ODT · TXT, MD, HTML, EML · up to {bytes(max)} each</div>
             <input ref={input} type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.gif,.bmp,.heic,.docx,.xlsx,.pptx,.odt,.ods,.odp,.rtf,.txt,.md,.csv,.html,.htm,.eml,.json" onChange={e => { if (e.target.files) add(e.target.files); e.target.value = '' }} />
             <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={e => { if (e.target.files) add(e.target.files); e.target.value = '' }} />
           </div>
           <div className="row mt wrap">
-            <button className="btn" onClick={() => camera.current?.click()}>📷 Take a photo</button>
-            {files.length > 0 && <button className="btn primary" onClick={go} disabled={busy}>{busy ? 'Uploading…' : `Upload ${files.length} file${files.length > 1 ? 's' : ''}`}</button>}
-            {files.length > 0 && !busy && <button className="btn ghost" onClick={() => setFiles([])}>Clear</button>}
+            <button type="button" className="btn" onClick={() => camera.current?.click()}><Icon name="camera" size={16} />Take a photo</button>
+            {files.length > 0 && <button type="button" className="btn primary" onClick={go} disabled={busy}>{busy ? 'Uploading…' : `Upload ${files.length} file${files.length > 1 ? 's' : ''}`}</button>}
+            {files.length > 0 && !busy && <button type="button" className="btn ghost" onClick={() => setFiles([])}>Clear</button>}
           </div>
-          {files.length > 0 && <ul className="upload-list mt">{files.map((f, i) => <li key={i}><span className="grow ellipsis">{f.name}</span><span className="muted small">{bytes(f.size)}</span><button className="btn ghost xs" onClick={() => setFiles(l => l.filter((_, j) => j !== i))} aria-label="Remove">×</button></li>)}</ul>}
+          {files.length > 0 && <ul className="upload-list mt">{files.map((f, i) => <li key={i}><Icon name="file" size={15} className="muted" /><span className="grow ellipsis">{f.name}</span><span className="muted small">{bytes(f.size)}</span><button type="button" className="btn ghost xs" onClick={() => setFiles(l => l.filter((_, j) => j !== i))} aria-label="Remove"><Icon name="x" size={14} /></button></li>)}</ul>}
           {items.length > 0 && <Card className="mt" title="Uploaded">
             <ul className="upload-list">{items.map((it, i) => <li key={i} className={it.status}><span className="grow ellipsis">{it.file.name}</span>{it.status === 'uploading' && <span className="muted small">{Math.round(it.progress * 100)}%</span>}{it.status === 'done' && it.document && <Link to={`/documents/${it.document.id}`}>open</Link>}{it.status === 'error' && <span className="bad small">{it.error}{it.document && <> · <Link to={`/documents/${it.document.id}`}>open the existing one</Link></>}</span>}</li>)}</ul>
             <p className="muted small mt-s">OCR runs in the background; see <Link to="/jobs">Processing</Link>.</p>
           </Card>}
         </div>
         <Card title="Apply to these uploads" className="upload-meta">
-          <div className="grid" style={{ gap: 12 }}>
+          <div className="stack">
             {files.length <= 1 && <Field label="Title" help="Empty = the file name. The date is read from the text when it can be."><input value={meta.title} onChange={e => setMeta({ ...meta, title: e.target.value })} /></Field>}
             <Field label="Document date"><input type="date" value={meta.created} onChange={e => setMeta({ ...meta, created: e.target.value })} /></Field>
             <Field label="Tags" group><Picker multi options={tax.tags} value={meta.tags} onChange={v => setMeta({ ...meta, tags: v as number[] })} placeholder="Tags…" onCreate={create('tags')} /></Field>
@@ -70,8 +71,8 @@ export default function Upload() {
       </div>
       <Card className="mt" title="Other ways in">
         <div className="two-col">
-          <div><h3>Consume folder and your Inbox</h3><p className="muted small">Anything dropped into <code>{settings?.consume_dir || 'DATA_DIR/consume'}</code> on the server becomes a document (a scanner's network share, Syncthing…). A sub-folder named after a person's email is theirs; other sub-folders become tags. With a <Link to="/settings?tab=folder">documents folder</Link> in your Nextcloud, its <b>Inbox</b> does the same from any device.</p></div>
-          <div><h3>API and scripts</h3><pre>{`curl -F document=@scan.pdf -F tags=1,2 -H "Authorization: Bearer <token>" ${location.origin}/api/v1/documents`}</pre><p className="muted small">Tokens under Settings → API tokens. <code>/api/v1/documents/post_document</code> accepts what Paperless clients send.</p></div>
+          <div><h3>Consume folder and your Inbox</h3><p className="muted small">Anything dropped into <code>{settings?.consume_dir || 'DATA_DIR/consume'}</code> on the server becomes a document (a scanner's network share, Syncthing…). A sub-folder named after a person's email is theirs; other sub-folders become tags. With a <Link to="/settings/folder">documents folder</Link> in your Nextcloud, its <b>Inbox</b> does the same from any device.</p></div>
+          <div><h3>API and scripts</h3><pre>{`curl -F document=@scan.pdf -F tags=1,2 -H "Authorization: Bearer <token>" ${location.origin}/api/v1/documents`}</pre><p className="muted small">Tokens under <Link to="/settings/api">Settings → API tokens</Link>. <code>/api/v1/documents/post_document</code> accepts what Paperless clients send.</p></div>
         </div>
       </Card>
     </>

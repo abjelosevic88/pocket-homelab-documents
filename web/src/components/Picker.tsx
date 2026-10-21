@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { inkFor } from '../lib/format'
+import { Icon } from './icons'
 
 export interface Option { id: number; name: string; color?: string; count?: number }
 
@@ -48,15 +49,15 @@ export function Picker({ options, value, onChange, multi = false, placeholder = 
   return (
     <div className={`picker ${open ? 'open' : ''} ${compact ? 'compact' : ''}`} ref={ref}>
       <div className="picker-box" onClick={() => { setOpen(true); input.current?.focus() }}>
-        {selected.map(id => { const o = byId.get(id); if (!o) return null; return <span key={id} className="chip-tag" style={o.color ? { background: o.color, color: inkFor(o.color), borderColor: o.color } : undefined}>{o.name}{multi && <button type="button" className="x" onClick={e => { e.stopPropagation(); toggle(id) }} aria-label="Remove">×</button>}</span> })}
+        {selected.map(id => { const o = byId.get(id); if (!o) return null; return <span key={id} className="chip-tag" style={o.color ? { background: o.color, color: inkFor(o.color), borderColor: o.color } : undefined}>{o.name}{multi && <button type="button" className="x" onClick={e => { e.stopPropagation(); toggle(id) }} aria-label="Remove"><Icon name="x" size={11} strokeWidth={2.4} /></button>}</span> })}
         <input ref={input} value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)} onKeyDown={key} placeholder={selected.length ? '' : placeholder} />
-        {!multi && selected.length > 0 && allowNone && <button type="button" className="x clear" onClick={e => { e.stopPropagation(); onChange(null) }} aria-label="Clear">×</button>}
+        {!multi && selected.length > 0 && allowNone && <button type="button" className="x clear" onClick={e => { e.stopPropagation(); onChange(null) }} aria-label="Clear"><Icon name="x" size={14} /></button>}
       </div>
       {open && <div className="picker-list">
         {list.map((o, i) => <button type="button" key={o.id} className={`${selected.includes(o.id) ? 'on' : ''} ${i === idx ? 'hl' : ''}`} onMouseEnter={() => setIdx(i)} onClick={() => toggle(o.id)}>
-          {o.color && <span className="swatch" style={{ background: o.color }} />}<span className="grow ellipsis">{o.name}</span>{o.count != null && <small className="muted">{o.count}</small>}{selected.includes(o.id) && <span>✓</span>}
+          {o.color && <span className="swatch" style={{ background: o.color }} />}<span className="grow ellipsis">{o.name}</span>{o.count != null && <small className="muted">{o.count}</small>}{selected.includes(o.id) && <Icon name="check" size={15} className="check" />}
         </button>)}
-        {canCreate && <button type="button" className={`create ${idx === list.length ? 'hl' : ''}`} onClick={create}>＋ Create “{q.trim()}”</button>}
+        {canCreate && <button type="button" className={`create ${idx === list.length ? 'hl' : ''}`} onClick={create}><Icon name="plus" size={15} />Create “{q.trim()}”</button>}
         {list.length === 0 && !canCreate && <div className="muted small pad-s">Nothing matches</div>}
       </div>}
     </div>

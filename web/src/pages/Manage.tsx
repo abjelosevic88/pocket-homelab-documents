@@ -7,6 +7,7 @@ import { docsURL, fmtDate, inkFor, plural } from '../lib/format'
 import { Card, Confirm, Field, Modal, PageHeader, Segmented, Tabs, Toggle, useToast } from '../components/ui'
 import { Picker } from '../components/Picker'
 import { Select } from '../components/Select'
+import { Icon } from '../components/icons'
 
 type Tab = 'tags' | 'correspondents' | 'document_types' | 'storage_paths' | 'custom_fields' | 'rules' | 'saved_views'
 const KIND_LABEL: Record<Tab, [string, string]> = { tags: ['Tag', 'Tags'], correspondents: ['Correspondent', 'Correspondents'], document_types: ['Document type', 'Document types'], storage_paths: ['Storage path', 'Storage paths'], custom_fields: ['Custom field', 'Custom fields'], rules: ['Rule', 'Rules'], saved_views: ['Saved view', 'Saved views'] }
@@ -17,7 +18,7 @@ export default function Manage() {
   return (
     <>
       <PageHeader title="Manage" sub="How documents are labelled and filed, and what happens to them when they come in." />
-      <Tabs value={tab} onChange={setTab} tabs={(Object.keys(KIND_LABEL) as Tab[]).map(k => ({ id: k, label: <>{KIND_LABEL[k][1]}{k !== 'rules' && <span className="muted"> {(tax[k] as unknown[]).length}</span>}</> }))} />
+      <Tabs className="underline" value={tab} onChange={setTab} tabs={(Object.keys(KIND_LABEL) as Tab[]).map(k => ({ id: k, label: <>{KIND_LABEL[k][1]}{k !== 'rules' && <span className="muted"> {(tax[k] as unknown[]).length}</span>}</> }))} />
       <div className="mt">
         {(tab === 'tags' || tab === 'correspondents' || tab === 'document_types' || tab === 'storage_paths') && <Taxonomy kind={tab} />}
         {tab === 'custom_fields' && <Fields />}
@@ -45,19 +46,19 @@ function Taxonomy({ kind }: { kind: 'tags' | 'correspondents' | 'document_types'
     try { await api.del(`${V1}/${kind}/${d.id}`); toast(`${one} removed`); reloadTax() } catch (e) { toast((e as Error).message, 'err') }
   }
   return (
-    <Card title={many} actions={<><input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter…" className="sm" style={{ width: 160 }} /><button className="btn primary sm" onClick={() => setEdit({ matching_algorithm: 6, is_insensitive: true })}>+ {one}</button></>}>
+    <Card title={many} actions={<><input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter…" className="sm" style={{ width: 160 }} aria-label="Filter" /><button type="button" className="btn primary sm" onClick={() => setEdit({ matching_algorithm: 6, is_insensitive: true })}><Icon name="plus" size={15} />{one}</button></>}>
       {kind === 'storage_paths' && <p className="muted small">A storage path is a folder layout for the mirror folder and exports: <code>{'{created_year}/{correspondent}/{title}'}</code>. Placeholders: <code>{'{title} {created} {created_year} {created_month} {created_month_name} {created_day} {added_year} {correspondent} {document_type} {tag_list} {tag} {asn} {original_name} {id}'}</code>.</p>}
       {kind === 'tags' && <p className="muted small">An <b>inbox</b> tag is put on every new document; remove it once the document is filed. Matching rules assign tags automatically; “Auto” learns from the documents you tag yourself.</p>}
       {items.length === 0 ? <p className="muted">None yet.</p> : (
         <table className="table compact">
           <thead><tr><th>Name</th>{kind === 'storage_paths' && <th>Path</th>}<th>Matching</th><th className="num">Documents</th>{kind !== 'tags' && <th>Last</th>}<th /></tr></thead>
           <tbody>{items.map(i => <tr key={i.id}>
-            <td>{'color' in i ? <span className="chip-tag sm" style={{ background: i.color, color: inkFor(i.color), borderColor: i.color }}>{i.is_inbox && '⌾ '}{i.name}</span> : i.name}</td>
+            <td>{'color' in i ? <span className="chip-tag sm" style={{ background: i.color, color: inkFor(i.color), borderColor: i.color }}>{i.is_inbox && <Icon name="inbox" size={11} strokeWidth={2.2} />}{i.name}</span> : i.name}</td>
             {kind === 'storage_paths' && <td className="mono small muted">{(i as Named).path}</td>}
             <td className="muted small">{ALGORITHMS.find(a => a.value === i.matching_algorithm)?.label}{i.match && i.matching_algorithm !== 6 && i.matching_algorithm !== 0 && <>: <code>{i.match}</code></>}</td>
             <td className="num"><Link to={docsURL({ [filterKey]: i.id })}>{i.document_count}</Link></td>
             {kind !== 'tags' && <td className="muted small">{(i as Named).last_created ? fmtDate((i as Named).last_created as string) : ''}</td>}
-            <td className="right nowrap"><button className="btn ghost sm" onClick={() => setEdit(i)}>Edit</button><button className="btn ghost sm danger-text" onClick={() => setDel(i)}>Delete</button></td>
+            <td className="right nowrap"><button type="button" className="btn ghost sm" onClick={() => setEdit(i)}>Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => setDel(i)}>Delete</button></td>
           </tr>)}</tbody>
         </table>
       )}
@@ -91,7 +92,7 @@ function TaxModal({ kind, item, onClose, onSaved }: { kind: 'tags' | 'correspond
           <Field label={f.matching_algorithm === 4 ? 'Regular expression' : 'Words'}><input value={f.match} onChange={e => setF({ ...f, match: e.target.value })} className="mono" placeholder={f.matching_algorithm === 4 ? '(?i)invoice\\s+no' : 'stadtwerke rechnung'} /></Field>
           <Toggle checked={f.is_insensitive} onChange={v => setF({ ...f, is_insensitive: v })} label="Ignore upper/lower case" />
         </>}
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Save</button></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>Save</button></div>
       </form>
     </Modal>
   )
@@ -103,9 +104,9 @@ function Fields() {
   const [edit, setEdit] = useState<Partial<CustomField> | null>(null)
   const [del, setDel] = useState<CustomField | null>(null)
   return (
-    <Card title="Custom fields" actions={<button className="btn primary sm" onClick={() => setEdit({ data_type: 'string' })}>+ Field</button>}>
+    <Card title="Custom fields" actions={<button type="button" className="btn primary sm" onClick={() => setEdit({ data_type: 'string' })}><Icon name="plus" size={15} />Field</button>}>
       <p className="muted small">Typed values on a document: an amount, a due date, a contract number, a link to another document. Searchable with <code>field:name=value</code>; a money field can be booked straight into Pocket Money.</p>
-      {tax.custom_fields.length === 0 ? <p className="muted">No fields yet.</p> : <table className="table compact"><thead><tr><th>Name</th><th>Type</th><th>Options</th><th className="num">Used</th><th /></tr></thead><tbody>{tax.custom_fields.map(f => <tr key={f.id}><td>{f.name}</td><td className="muted">{FIELD_TYPES.find(t => t.value === f.data_type)?.label}</td><td className="muted small">{f.extra?.options?.join(', ')}{f.extra?.currency}</td><td className="num">{f.document_count}</td><td className="right nowrap"><button className="btn ghost sm" onClick={() => setEdit(f)}>Edit</button><button className="btn ghost sm danger-text" onClick={() => setDel(f)}>Delete</button></td></tr>)}</tbody></table>}
+      {tax.custom_fields.length === 0 ? <p className="muted">No fields yet.</p> : <table className="table compact"><thead><tr><th>Name</th><th>Type</th><th>Options</th><th className="num">Used</th><th /></tr></thead><tbody>{tax.custom_fields.map(f => <tr key={f.id}><td>{f.name}</td><td className="muted">{FIELD_TYPES.find(t => t.value === f.data_type)?.label}</td><td className="muted small">{f.extra?.options?.join(', ')}{f.extra?.currency}</td><td className="num">{f.document_count}</td><td className="right nowrap"><button type="button" className="btn ghost sm" onClick={() => setEdit(f)}>Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => setDel(f)}>Delete</button></td></tr>)}</tbody></table>}
       {edit && <FieldModal item={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); reloadTax() }} />}
       {del && <Confirm title={`Delete the field “${del.name}”?`} message={`Its values on ${plural(del.document_count, 'document')} are removed.`} onCancel={() => setDel(null)} onConfirm={async () => { const d = del; setDel(null); try { await api.del(`${V1}/custom_fields/${d.id}`); toast('Field removed'); reloadTax() } catch (e) { toast((e as Error).message, 'err') } }} label="Delete" />}
     </Card>
@@ -129,7 +130,7 @@ function FieldModal({ item, onClose, onSaved }: { item: Partial<CustomField>; on
         <Field group label="Type" help={item.id && item.document_count ? 'The type cannot change while documents use the field.' : undefined}><Select value={f.data_type} disabled={!!(item.id && item.document_count)} onChange={v => setF({ ...f, data_type: v as CustomField['data_type'] })} options={FIELD_TYPES.map(t => ({ value: t.value, label: t.label }))} /></Field>
         {f.data_type === 'select' && <Field label="Choices, one per line"><textarea value={f.options} onChange={e => setF({ ...f, options: e.target.value })} rows={4} /></Field>}
         {f.data_type === 'monetary' && <Field label="Currency"><input value={f.currency} onChange={e => setF({ ...f, currency: e.target.value })} placeholder="EUR" maxLength={3} /></Field>}
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Save</button></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary">Save</button></div>
       </form>
     </Modal>
   )
@@ -167,9 +168,9 @@ function Rules() {
     return { when: f.length ? f.join(', ') : 'every document', then: a.length ? a.join(', ') : 'nothing' }
   }
   return (
-    <Card title="Rules" actions={<button className="btn primary sm" onClick={() => setEdit({ enabled: true, trigger: 'added', filters: { filename: '', path: '', source: '', mime: '', content: '', correspondent: null, document_type: null, tags: [] }, actions: { title: '', add_tags: [], remove_tags: [], correspondent: null, document_type: null, storage_path: null, fields: {}, favorite: null, skip_matching: false } })}>+ Rule</button>}>
+    <Card title="Rules" actions={<button type="button" className="btn primary sm" onClick={() => setEdit({ enabled: true, trigger: 'added', filters: { filename: '', path: '', source: '', mime: '', content: '', correspondent: null, document_type: null, tags: [] }, actions: { title: '', add_tags: [], remove_tags: [], correspondent: null, document_type: null, storage_path: null, fields: {}, favorite: null, skip_matching: false } })}><Icon name="plus" size={15} />Rule</button>}>
       <p className="muted small">When a document comes in (after OCR and the matching above) or is changed, rules that fit are applied in order. “Run now” applies a rule to everything already here.</p>
-      {!rules ? null : rules.length === 0 ? <p className="muted">No rules yet. Example: file name <code>*ikea*</code> → correspondent IKEA, tag Receipts, title <code>{'IKEA {created}'}</code>.</p> : <table className="table compact"><thead><tr><th /><th>Rule</th><th>When</th><th>Then</th><th /></tr></thead><tbody>{rules.map(r => { const d = describe(r); return <tr key={r.id} className={r.enabled ? '' : 'muted'}><td><Toggle checked={r.enabled} onChange={async v => { await api.put(`${V1}/rules/${r.id}`, { ...r, enabled: v }); load() }} /></td><td>{r.name}<div className="muted small">{r.trigger === 'scheduled' ? 'on a date' : `on ${r.trigger}`}</div></td><td className="small">{d.when}</td><td className="small">{d.then}</td><td className="right nowrap"><button className="btn ghost sm" onClick={async () => { await api.post(`${V1}/rules/${r.id}/run`); toast('Running on all documents (see Processing)') }}>Run now</button><button className="btn ghost sm" onClick={() => setEdit(r)}>Edit</button><button className="btn ghost sm danger-text" onClick={() => setDel(r)}>Delete</button></td></tr> })}</tbody></table>}
+      {!rules ? null : rules.length === 0 ? <p className="muted">No rules yet. Example: file name <code>*ikea*</code> → correspondent IKEA, tag Receipts, title <code>{'IKEA {created}'}</code>.</p> : <table className="table compact"><thead><tr><th /><th>Rule</th><th>When</th><th>Then</th><th /></tr></thead><tbody>{rules.map(r => { const d = describe(r); return <tr key={r.id} className={r.enabled ? '' : 'muted'}><td><Toggle checked={r.enabled} onChange={async v => { await api.put(`${V1}/rules/${r.id}`, { ...r, enabled: v }); load() }} /></td><td>{r.name}<div className="muted small">{r.trigger === 'scheduled' ? 'on a date' : `on ${r.trigger}`}</div></td><td className="small">{d.when}</td><td className="small">{d.then}</td><td className="right nowrap"><button type="button" className="btn ghost sm" onClick={async () => { await api.post(`${V1}/rules/${r.id}/run`); toast('Running on all documents (see Processing)') }}>Run now</button><button type="button" className="btn ghost sm" onClick={() => setEdit(r)}>Edit</button><button type="button" className="btn ghost sm danger-text" onClick={() => setDel(r)}>Delete</button></td></tr> })}</tbody></table>}
       {edit && <RuleModal item={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); reloadTax() }} />}
       {del && <Confirm title={`Delete the rule “${del.name}”?`} message="Documents it already changed stay as they are." onCancel={() => setDel(null)} onConfirm={async () => { const d = del; setDel(null); await api.del(`${V1}/rules/${d.id}`); load() }} label="Delete" />}
     </Card>
@@ -218,10 +219,10 @@ function RuleModal({ item, onClose, onSaved }: { item: Partial<Rule>; onClose: (
           <Field label="Storage path" group><Picker options={tax.storage_paths} value={a.storage_path} onChange={v => setA({ storage_path: v as number | null })} /></Field>
           <Field label="Favourite" group><Segmented value={a.favorite === null || a.favorite === undefined ? 'keep' : a.favorite ? 'yes' : 'no'} onChange={v => setA({ favorite: v === 'keep' ? null : v === 'yes' })} options={[{ value: 'keep', label: 'keep' }, { value: 'yes', label: 'yes' }, { value: 'no', label: 'no' }]} size="sm" /></Field>
         </div>
-        <Toggle checked={!!a.notify} onChange={v => setA({ notify: v })} label="Send a message (Settings → Integrations → Notifications)" />
+        <Toggle checked={!!a.notify} onChange={v => setA({ notify: v })} label="Send a message (Settings → Notifications)" />
         {a.notify && <Field label="Message" help="Placeholders: {title} {created} {correspondent} {document_type} {asn} {rule}. A link to the document is added."><input value={a.notify_message || ''} onChange={e => setA({ notify_message: e.target.value })} placeholder="{title} expires in 30 days" /></Field>}
         {tax.custom_fields.length > 0 && <Field label="Set custom fields" group><div className="grid" style={{ gap: 6 }}>{tax.custom_fields.map(cf => <div key={cf.id} className="row"><span className="label" style={{ width: 140 }}>{cf.name}</span><input value={a.fields?.[String(cf.id)] || ''} onChange={e => { const fields = { ...(a.fields || {}) }; if (e.target.value) fields[String(cf.id)] = e.target.value; else delete fields[String(cf.id)]; setA({ fields }) }} placeholder="leave empty to not set" /></div>)}</div></Field>}
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Save</button></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary">Save</button></div>
       </form>
     </Modal>
   )
@@ -234,8 +235,8 @@ function Views() {
   const up = async (v: SavedView, patch: Partial<SavedView>) => { try { await api.put(`${V1}/saved_views/${v.id}`, patch); reloadTax() } catch (e) { toast((e as Error).message, 'err') } }
   return (
     <Card title="Saved views">
-      <p className="muted small">A saved view is a search with its filters and sort. Make one from the Documents page (☆ Save view). Views can sit in the sidebar and on the dashboard.</p>
-      {tax.saved_views.length === 0 ? <p className="muted">No views yet.</p> : <table className="table compact"><thead><tr><th>Name</th><th>Query</th><th>Sidebar</th><th>Dashboard</th><th /></tr></thead><tbody>{tax.saved_views.map(v => <tr key={v.id}><td><Link to={docsURL({ ...v.query, view: v.id })}>{v.name}</Link></td><td className="mono small muted">{Object.entries(v.query).map(([k, x]) => `${k}=${x}`).join(' ') || 'all'}</td><td><Toggle checked={v.in_sidebar} onChange={x => up(v, { in_sidebar: x })} /></td><td><Toggle checked={v.on_dashboard} onChange={x => up(v, { on_dashboard: x })} /></td><td className="right"><button className="btn ghost sm danger-text" onClick={() => setDel(v)}>Delete</button></td></tr>)}</tbody></table>}
+      <p className="muted small">A saved view is a search with its filters and sort. Make one from the Documents page (Save view). Views can sit in the sidebar and on the dashboard.</p>
+      {tax.saved_views.length === 0 ? <p className="muted">No views yet.</p> : <table className="table compact"><thead><tr><th>Name</th><th>Query</th><th>Sidebar</th><th>Dashboard</th><th /></tr></thead><tbody>{tax.saved_views.map(v => <tr key={v.id}><td><Link to={docsURL({ ...v.query, view: v.id })}>{v.name}</Link></td><td className="mono small muted">{Object.entries(v.query).map(([k, x]) => `${k}=${x}`).join(' ') || 'all'}</td><td><Toggle checked={v.in_sidebar} onChange={x => up(v, { in_sidebar: x })} /></td><td><Toggle checked={v.on_dashboard} onChange={x => up(v, { on_dashboard: x })} /></td><td className="right"><button type="button" className="btn ghost sm danger-text" onClick={() => setDel(v)}>Delete</button></td></tr>)}</tbody></table>}
       {del && <Confirm title={`Delete the view “${del.name}”?`} message="Only the saved search goes; no documents are touched." onCancel={() => setDel(null)} onConfirm={async () => { const d = del; setDel(null); await api.del(`${V1}/saved_views/${d.id}`); reloadTax() }} label="Delete" />}
     </Card>
   )

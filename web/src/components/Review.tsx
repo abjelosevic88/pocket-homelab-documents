@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { api, V1 } from '../lib/api'
 import type { Document } from '../lib/types'
-import { Field, Modal, Segmented, useToast } from './ui'
+import { Field, Modal, Segmented, Toggle, useToast } from './ui'
+import { Icon } from './icons'
 
 export interface ReviewHit { id: number; title: string; status: string; url: string; revisions: number; open_threads: number; open_issues: number; updated_at: string; my_role: string }
 export const reviewStatusLabel: Record<string, string> = { draft: 'Review draft', in_review: 'In review', changes_requested: 'Changes requested', approved: 'Approved', rejected: 'Rejected', cancelled: 'Review cancelled' }
@@ -38,7 +39,7 @@ export function ReviewAction({ doc }: { doc: Document }) {
   const active = st.review && !finished(st.review.status) ? st.review : undefined
   return <>
     {st.review && <ReviewBadge review={st.review} />}
-    {st.available && <button className="btn sm" onClick={() => setOpen(true)} title="Send this document's PDF to Pocket Collaborator">{active ? 'New revision…' : 'Send for review…'}</button>}
+    {st.available && <button type="button" className="btn sm" onClick={() => setOpen(true)} title="Send this document's PDF to Pocket Collaborator">{active ? 'New revision…' : 'Send for review…'}</button>}
     {open && <SendReview doc={doc} existing={active} onClose={() => { setOpen(false); load() }} />}
   </>
 }
@@ -58,7 +59,7 @@ function SendReview({ doc, existing, onClose }: { doc: Document; existing?: Revi
     <Modal title={`Send “${doc.title}” for review`} onClose={onClose}>
       {done ? <div className="grid" style={{ gap: 12 }}>
         <div className="callout success">{done.created ? 'A review was created.' : `Revision v${done.revision} was added.`}</div>
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Close</button><a className="btn primary" href={done.url} target="_blank" rel="noreferrer">Open in Collaborator ↗</a></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Close</button><a className="btn primary" href={done.url} target="_blank" rel="noreferrer">Open in Collaborator<Icon name="external" size={14} /></a></div>
       </div> : <form onSubmit={send} className="grid" style={{ gap: 14 }}>
         {existing && <Field label="This document is already in review" group>
           <div className="row wrap" style={{ gap: 8 }}><ReviewBadge review={existing} /><span className="muted small">{existing.title} · v{existing.revisions}</span></div>
@@ -69,13 +70,13 @@ function SendReview({ doc, existing, onClose }: { doc: Document; existing?: Revi
           <Field label="What should people look at?"><textarea value={f.description} onChange={e => setF(x => ({ ...x, description: e.target.value }))} rows={3} placeholder="Optional" /></Field>
           <div className="two-col tight">
             <Field label="Due date"><input type="date" value={f.due_date} onChange={e => setF(x => ({ ...x, due_date: e.target.value }))} /></Field>
-            <label className="row small" style={{ alignSelf: 'end', paddingBottom: 8 }}><input type="checkbox" style={{ width: 'auto' }} checked={f.start} onChange={e => setF(x => ({ ...x, start: e.target.checked }))} /> Start the review right away</label>
+            <span style={{ alignSelf: 'end', paddingBottom: 8 }}><Toggle checked={f.start} onChange={v => setF(x => ({ ...x, start: v }))} label="Start the review right away" /></span>
           </div>
         </>}
         {existing && mode === 'revision' && <Field label="What changed?"><input value={f.note} onChange={e => setF(x => ({ ...x, note: e.target.value }))} placeholder="Optional note for the reviewers" /></Field>}
         <p className="muted small">The {doc.has_archive ? 'PDF/A twin' : 'PDF'} is sent; the review links back to this document. People and roles are added in Collaborator.</p>
-        {err && <div className="callout danger">{err}</div>}
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>{busy ? 'Sending…' : existing && mode === 'revision' ? 'Send revision' : 'Send for review'}</button></div>
+        {err && <div className="callout danger"><Icon name="alert" size={15} /><span>{err}</span></div>}
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{busy ? 'Sending…' : existing && mode === 'revision' ? 'Send revision' : 'Send for review'}</button></div>
       </form>}
     </Modal>
   )

@@ -25,7 +25,7 @@ export default function Jobs() {
     <>
       <PageHeader title="Processing" sub={`${queue.queued} waiting · ${queue.running} running${data?.failed ? ` · ${data.failed} failed` : ''}`} actions={<>
         <Segmented size="sm" value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'active', label: 'Active' }, { value: 'failed', label: 'Failed' }]} />
-        <button className="btn sm" onClick={() => act(() => api.del(`${V1}/jobs`), 'Finished jobs cleared')}>Clear finished</button>
+        <button type="button" className="btn sm" onClick={() => act(() => api.del(`${V1}/jobs`), 'Finished jobs cleared')}>Clear finished</button>
       </>} />
       {!data ? <Loading /> : data.jobs.length === 0 ? <Empty title="Nothing here">Jobs appear when documents are uploaded or OCR is run again.</Empty> : (
         <Card flush>
@@ -38,9 +38,9 @@ export default function Jobs() {
               <td className="muted small ellipsis" style={{ maxWidth: 360 }}>{j.status === 'failed' ? <span className="bad">{j.error}</span> : j.progress}</td>
               <td className="muted small nowrap" title={stamp(j.finished_at || j.started_at || j.created_at)}>{ago(j.finished_at || j.started_at || j.created_at)}</td>
               <td className="right nowrap">
-                <button className="btn ghost xs" onClick={() => api.get<Job>(`${V1}/jobs/${j.id}`).then(setOpen)}>Log</button>
-                {(j.status === 'failed' || j.status === 'cancelled') && <button className="btn ghost xs" onClick={() => act(() => api.post(`${V1}/jobs/${j.id}/retry`), 'Queued again')}>Retry</button>}
-                {j.status === 'queued' && <button className="btn ghost xs danger-text" onClick={() => act(() => api.post(`${V1}/jobs/${j.id}/cancel`), 'Cancelled')}>Cancel</button>}
+                <button type="button" className="btn ghost xs" onClick={() => api.get<Job>(`${V1}/jobs/${j.id}`).then(setOpen)}>Log</button>
+                {(j.status === 'failed' || j.status === 'cancelled') && <button type="button" className="btn ghost xs" onClick={() => act(() => api.post(`${V1}/jobs/${j.id}/retry`), 'Queued again')}>Retry</button>}
+                {j.status === 'queued' && <button type="button" className="btn ghost xs danger-text" onClick={() => act(() => api.post(`${V1}/jobs/${j.id}/cancel`), 'Cancelled')}>Cancel</button>}
               </td>
             </tr>)}</tbody>
           </table>

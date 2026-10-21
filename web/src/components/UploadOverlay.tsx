@@ -21,7 +21,7 @@ export function UploadOverlay({ files, onClose }: { files: File[]; onClose: () =
         </li>)}
       </ul>
       {done && <p className="muted small mt">Processing continues in the background; the documents appear with their text once OCR is through.</p>}
-      <div className="form-actions"><button className="btn primary" onClick={onClose}>Close</button></div>
+      <div className="form-actions"><button type="button" className="btn primary" onClick={onClose}>Close</button></div>
     </Modal>
   )
 }

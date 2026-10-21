@@ -16,7 +16,7 @@ export default function Trash() {
   const act = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); toast(msg); reload(); bump() } catch (e) { toast((e as Error).message, 'err') } }
   return (
     <>
-      <PageHeader title="Trash" sub={data ? (data.trash_days ? `Deleted documents are removed for good after ${data.trash_days} days.` : 'Deleted documents stay here until you empty the trash.') : ''} actions={data && data.count > 0 && <button className="btn danger sm" onClick={() => setEmpty(true)}>Empty trash</button>} />
+      <PageHeader title="Trash" sub={data ? (data.trash_days ? `Deleted documents are removed for good after ${data.trash_days} days.` : 'Deleted documents stay here until you empty the trash.') : ''} actions={data && data.count > 0 && <button type="button" className="btn danger sm" onClick={() => setEmpty(true)}>Empty trash</button>} />
       {!data ? <Loading /> : data.results.length === 0 ? <Empty title="The trash is empty" /> : (
         <Card flush>
           <table className="table">
@@ -25,7 +25,7 @@ export default function Trash() {
               <td className="thumb-cell"><Thumb d={d} size="sm" /></td>
               <td>{d.title}<div className="muted small">{d.original_name} · {d.correspondent_name}</div></td>
               <td className="muted nowrap">{ago(d.deleted_at || d.modified_at)}</td>
-              <td className="right nowrap"><button className="btn sm" onClick={() => act(() => api.post(`${V1}/documents/${d.id}/restore`), 'Restored')}>Restore</button> <button className="btn ghost sm danger-text" onClick={() => setPurge(d)}>Delete for good</button></td>
+              <td className="right nowrap"><button type="button" className="btn sm" onClick={() => act(() => api.post(`${V1}/documents/${d.id}/restore`), 'Restored')}>Restore</button> <button type="button" className="btn ghost sm danger-text" onClick={() => setPurge(d)}>Delete for good</button></td>
             </tr>)}</tbody>
           </table>
         </Card>

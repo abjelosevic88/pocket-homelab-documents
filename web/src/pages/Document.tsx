@@ -4,8 +4,10 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { FIELD_TYPES } from '../lib/types'
 import type { Document, HistoryEntry, Job, Note, Share, Suggestions, CustomField, FieldValue, Version, DocShare } from '../lib/types'
-import { ago, bytes, fileIcon, fmtDate, money, plural, stamp } from '../lib/format'
-import { Card, Confirm, Field, Loading, Menu, Modal, Segmented, Tabs, useToast } from '../components/ui'
+import { ago, bytes, fileIconName, fmtDate, money, plural, stamp } from '../lib/format'
+import { Card, Confirm, Field, Loading, type MenuItem, MenuButton, Modal, Segmented, Tabs, Toggle, download, modalOpen, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
+import { setCrumb } from '../components/Layout'
 import { ReviewAction } from '../components/Review'
 import { Picker } from '../components/Picker'
 import { TagChip } from '../components/docs'
@@ -37,6 +39,7 @@ export default function DocumentPage() {
   const [similar, setSimilar] = useState<Document[] | null>(null)
   const dirty = useMemo(() => form && doc && JSON.stringify(normalize(form)) !== JSON.stringify(normalize(doc)), [form, doc])
   useEffect(() => { localStorage.setItem('pd-preview', preview) }, [preview])
+  useEffect(() => { setCrumb(doc?.title || null) }, [doc?.title])
 
   const load = useCallback(async () => {
     const r = await api.get<{ document: Document; prev: number; next: number; job?: Job }>(`${V1}/documents/${id}`)
@@ -75,6 +78,7 @@ export default function DocumentPage() {
     const h = (e: KeyboardEvent) => {
       const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)
       if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); if (dirty) save() }
+      else if (modalOpen() || document.querySelector('.menu, .sel-pop, .dropdown-pop, .picker-list')) return
       else if (!typing && e.key === 'ArrowLeft' && nav.prev) navigate(`/documents/${nav.prev}`)
       else if (!typing && e.key === 'ArrowRight' && nav.next) navigate(`/documents/${nav.next}`)
       else if (!typing && e.key === 'Escape') navigate(-1)
@@ -116,58 +120,61 @@ export default function DocumentPage() {
   return (
     <div className="doc-page">
       <div className="doc-head">
-        <Link to="/documents" className="btn ghost sm">← Documents</Link>
-        <span className="row nav-arrows">
-          <button className="btn ghost sm" disabled={!nav.prev} onClick={() => navigate(`/documents/${nav.prev}`)} title="Newer (←)">‹</button>
-          <button className="btn ghost sm" disabled={!nav.next} onClick={() => navigate(`/documents/${nav.next}`)} title="Older (→)">›</button>
+        <Link to="/documents" className="btn ghost sm hide-sm"><Icon name="arrow-left" size={15} />Documents</Link>
+        <span className="row nav-arrows" style={{ gap: 2 }}>
+          <button type="button" className="btn ghost icon-only sm" disabled={!nav.prev} onClick={() => navigate(`/documents/${nav.prev}`)} title="Newer (←)" aria-label="Newer document"><Icon name="chevron-left" size={16} /></button>
+          <button type="button" className="btn ghost icon-only sm" disabled={!nav.next} onClick={() => navigate(`/documents/${nav.next}`)} title="Older (→)" aria-label="Older document"><Icon name="chevron-right" size={16} /></button>
         </span>
         <span className="spacer" />
         {doc.status !== 'done' && <span className={`badge st-${doc.status}`}>{doc.status === 'failed' ? 'OCR failed' : doc.status === 'processing' ? 'OCR running…' : 'waiting for OCR'}</span>}
-        <button className={`btn sm ${form.favorite ? 'on' : ''}`} onClick={() => setForm({ ...form, favorite: !form.favorite })} title="Favourite">{form.favorite ? '★' : '☆'}</button>
-        <a className="btn sm" href={`${V1}/documents/${doc.id}/download`}>⇣ {doc.has_archive ? 'PDF' : 'Download'}</a>
+        <button type="button" className={`btn icon-only sm ${form.favorite ? 'on' : ''}`} onClick={() => setForm({ ...form, favorite: !form.favorite })} title={form.favorite ? 'Favourite (click to unmark)' : 'Mark as favourite'} aria-label="Favourite" aria-pressed={!!form.favorite}><span className={form.favorite ? 'star' : ''} style={{ margin: 0 }}><Icon name="star" size={15} /></span></button>
+        <a className="btn sm" href={`${V1}/documents/${doc.id}/download`}><Icon name="download" size={15} />{doc.has_archive ? 'PDF' : 'Download'}</a>
         {isOwner && <ReviewAction doc={doc} />}
-        <Menu align="right" button={<button className="btn sm">More ▾</button>}>
-          {doc.has_archive && <a href={`${V1}/documents/${doc.id}/download?original=1`}>Download original ({doc.original_name.split('.').pop()?.toUpperCase()})</a>}
-          <a href={`${V1}/documents/${doc.id}/preview`} target="_blank" rel="noreferrer">Open in a new tab</a>
-          {isOwner && <button onClick={() => setShare(true)}>Share link…</button>}
-          {isOwner && users.length > 1 && <button onClick={() => setShareWith(true)}>Share with someone here…</button>}
-          {isOwner && <button onClick={() => replaceInput.current?.click()}>Replace the file…</button>}
-          {isOwner && <button onClick={() => setLangOpen(true)}>Run OCR again with other languages…</button>}
-          <button onClick={() => setMoneyOpen(true)}>Book in Pocket Money…</button>
-          <button onClick={() => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, {}), 'Queued for OCR')}>Run OCR again</button>
-          <button onClick={() => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, { mode: 'force', force_text: true }), 'Queued for OCR')}>Force OCR (replace text layer)</button>
-          <button onClick={() => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, { mode: 'redo' }), 'Queued for OCR')}>Redo OCR (keep vector text)</button>
-          {isOwner && <button className="danger-text" onClick={() => setDel(true)}>Move to trash</button>}
-        </Menu>
-        <button className="btn primary sm" disabled={!dirty || saving || !canEdit} onClick={save} title="⌘S">{saving ? 'Saving…' : 'Save'}</button>
+        <MenuButton label="More actions" className="btn sm" align="right" width={280} items={() => {
+          const it: MenuItem[] = []
+          if (doc.has_archive) it.push({ label: `Download original (${doc.original_name.split('.').pop()?.toUpperCase()})`, icon: 'download', onSelect: () => download(`${V1}/documents/${doc.id}/download?original=1`) })
+          it.push({ label: 'Open in a new tab', icon: 'external', onSelect: () => { window.open(`${V1}/documents/${doc.id}/preview`, '_blank', 'noopener') } })
+          if (isOwner) it.push('sep', { label: 'Share link…', icon: 'link', onSelect: () => setShare(true) })
+          if (isOwner && users.length > 1) it.push({ label: 'Share with someone here…', icon: 'users', onSelect: () => setShareWith(true) })
+          if (isOwner) it.push({ label: 'Replace the file…', icon: 'upload', onSelect: () => replaceInput.current?.click() })
+          it.push({ label: 'Book in Pocket Money…', icon: 'wallet', onSelect: () => setMoneyOpen(true) })
+          it.push('sep', { heading: 'OCR' })
+          if (isOwner) it.push({ label: 'Again with other languages…', icon: 'globe', onSelect: () => setLangOpen(true) })
+          it.push({ label: 'Run OCR again', icon: 'refresh', onSelect: () => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, {}), 'Queued for OCR') })
+          it.push({ label: 'Force OCR (replace text layer)', icon: 'scan', onSelect: () => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, { mode: 'force', force_text: true }), 'Queued for OCR') })
+          it.push({ label: 'Redo OCR (keep vector text)', icon: 'text', onSelect: () => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, { mode: 'redo' }), 'Queued for OCR') })
+          if (isOwner) it.push('sep', { label: 'Move to trash', icon: 'trash', danger: true, onSelect: () => setDel(true) })
+          return it
+        }}>More<Icon name="chevron-down" size={14} /></MenuButton>
+        <button type="button" className="btn primary sm" disabled={!dirty || saving || !canEdit} onClick={save} title="⌘S">{saving ? 'Saving…' : 'Save'}</button>
         <input ref={replaceInput} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.docx,.xlsx,.pptx,.odt,.txt,.md,.html,.eml" onChange={e => { if (e.target.files?.[0]) replace(e.target.files[0]); e.target.value = '' }} />
       </div>
-      {!isOwner && <div className="shared-banner">⇄ Shared with you by <b>{doc.owner_name}</b> · {access === 'edit' ? 'you can change its details and add notes' : 'view only'}</div>}
-      {doc.status === 'failed' && <div className="callout danger mb"><b>OCR failed:</b> {doc.status_message} <button className="link-btn" onClick={() => navigate('/jobs')}>See the log</button></div>}
-      {job && doc.status !== 'done' && job.progress && <div className="callout mb small">{job.progress}</div>}
+      {!isOwner && <div className="shared-banner"><Icon name="share" size={15} />Shared with you by <b>{doc.owner_name}</b> · {access === 'edit' ? 'you can change its details and add notes' : 'view only'}</div>}
+      {doc.status === 'failed' && <div className="callout danger mb"><Icon name="alert" size={15} /><span><b>OCR failed:</b> {doc.status_message} <button type="button" className="link-btn" onClick={() => navigate('/jobs')}>See the log</button></span></div>}
+      {job && doc.status !== 'done' && job.progress && <div className="callout mb small"><span className="spinner" /><span>{job.progress}</span></div>}
       <div className="doc-split">
         <div className="doc-form">
           <input className="title-input" value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Title" />
           {hasSugg && <div className="sugg">
-            <span className="muted small">Suggested:</span>
-            {suggDates.map(d => <button key={d} className="chip" onClick={() => applySugg({ created: d })}>📅 {fmtDate(d)}</button>)}
-            {suggCorr.map(c => <button key={'c' + c} className="chip" onClick={() => applySugg({ correspondent: c })}>👤 {tax.correspondents.find(x => x.id === c)?.name}{conf(sugg, 'correspondent', c)}</button>)}
-            {suggType.map(c => <button key={'t' + c} className="chip" onClick={() => applySugg({ document_type: c })}>📁 {tax.document_types.find(x => x.id === c)?.name}{conf(sugg, 'document_type', c)}</button>)}
-            {suggPath.map(c => <button key={'p' + c} className="chip" onClick={() => applySugg({ storage_path: c })}>🗂 {tax.storage_paths.find(x => x.id === c)?.name}{conf(sugg, 'storage_path', c)}</button>)}
+            <span className="muted small row" style={{ gap: 5 }}><Icon name="sparkles" size={14} />Suggested:</span>
+            {suggDates.map(d => <button type="button" key={d} className="chip" onClick={() => applySugg({ created: d })}><Icon name="calendar" size={13} />{fmtDate(d)}</button>)}
+            {suggCorr.map(c => <button type="button" key={'c' + c} className="chip" onClick={() => applySugg({ correspondent: c })}><Icon name="user" size={13} />{tax.correspondents.find(x => x.id === c)?.name}{conf(sugg, 'correspondent', c)}</button>)}
+            {suggType.map(c => <button type="button" key={'t' + c} className="chip" onClick={() => applySugg({ document_type: c })}><Icon name="file-text" size={13} />{tax.document_types.find(x => x.id === c)?.name}{conf(sugg, 'document_type', c)}</button>)}
+            {suggPath.map(c => <button type="button" key={'p' + c} className="chip" onClick={() => applySugg({ storage_path: c })}><Icon name="folder" size={13} />{tax.storage_paths.find(x => x.id === c)?.name}{conf(sugg, 'storage_path', c)}</button>)}
             {suggTags.map(t => { const tag = tax.tags.find(x => x.id === t); return tag ? <TagChip key={'g' + t} tag={tag} small onClick={() => applySugg({ tags: [...(form.tags || []), t] })} /> : null })}
-            <button className="link-btn small" onClick={() => applySugg({ created: suggDates[0] || form.created, correspondent: form.correspondent ?? suggCorr[0] ?? null, document_type: form.document_type ?? suggType[0] ?? null, storage_path: form.storage_path ?? suggPath[0] ?? null, tags: [...(form.tags || []), ...suggTags] })}>apply all</button>
+            <button type="button" className="link-btn small" onClick={() => applySugg({ created: suggDates[0] || form.created, correspondent: form.correspondent ?? suggCorr[0] ?? null, document_type: form.document_type ?? suggType[0] ?? null, storage_path: form.storage_path ?? suggPath[0] ?? null, tags: [...(form.tags || []), ...suggTags] })}>apply all</button>
           </div>}
           <Tabs value={tab} onChange={setTab} tabs={[{ id: 'details', label: 'Details' }, { id: 'content', label: 'Text' }, { id: 'notes', label: <>Notes{doc.notes_count ? <span className="count">{doc.notes_count}</span> : null}</> }, { id: 'history', label: 'History' }, ...(isOwner ? [{ id: 'versions' as Tab, label: 'Versions' }, { id: 'similar' as Tab, label: 'Similar' }] : [])]} />
           <div className="tab-body">
             {tab === 'versions' && <VersionsTab doc={doc} onChange={load} />}
             {tab === 'details' && !isOwner && <div className="grid" style={{ gap: 10 }}>
-              <div className="row wrap"><span className="muted small">Tags:</span>{(doc.shared_tags || []).map(t => <span key={t} className="chip-tag sm" style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text)' }}>{t}</span>)}{!(doc.shared_tags || []).length && <span className="muted small">none</span>}</div>
+              <div className="row wrap"><span className="muted small">Tags:</span>{(doc.shared_tags || []).map(t => <span key={t} className="chip-tag plain sm">{t}</span>)}{!(doc.shared_tags || []).length && <span className="muted small">none</span>}</div>
               <table className="table compact meta-table"><tbody>
                 <tr><th>Correspondent</th><td>{doc.correspondent_name || '—'}</td></tr>
                 <tr><th>Type</th><td>{doc.document_type_name || '—'}</td></tr>
                 <tr><th>Date</th><td>{canEdit ? <input type="date" value={form.created || ''} onChange={e => setForm({ ...form, created: e.target.value })} style={{ width: 180 }} /> : fmtDate(doc.created)}</td></tr>
                 <tr><th>ASN</th><td>{doc.asn ?? '—'}</td></tr>
-                <tr><th>File</th><td>{fileIcon(doc.mime, doc.original_name)} {doc.original_name} · {bytes(doc.size)}{doc.page_count > 0 && <> · {plural(doc.page_count, 'page')}</>}</td></tr>
+                <tr><th>File</th><td><Icon name={fileIconName(doc.mime, doc.original_name)} size={15} />{doc.original_name} · {bytes(doc.size)}{doc.page_count > 0 && <> · {plural(doc.page_count, 'page')}</>}</td></tr>
               </tbody></table>
             </div>}
             {tab === 'details' && isOwner && <div className="grid" style={{ gap: 12 }}>
@@ -182,7 +189,7 @@ export default function DocumentPage() {
               {tax.custom_fields.length > 0 && <FieldsEditor fields={tax.custom_fields} values={form.custom_fields || []} onChange={v => setForm({ ...form, custom_fields: v })} />}
               <table className="table compact meta-table">
                 <tbody>
-                  <tr><th>File</th><td>{fileIcon(doc.mime, doc.original_name)} {doc.original_name} · {bytes(doc.size)}{doc.has_archive && <> · PDF/A {bytes(doc.archive_size)}</>}{doc.page_count > 0 && <> · {plural(doc.page_count, 'page')}</>}</td></tr>
+                  <tr><th>File</th><td><Icon name={fileIconName(doc.mime, doc.original_name)} size={15} />{doc.original_name} · {bytes(doc.size)}{doc.has_archive && <> · PDF/A {bytes(doc.archive_size)}</>}{doc.page_count > 0 && <> · {plural(doc.page_count, 'page')}</>}</td></tr>
                   <tr><th>Added</th><td title={stamp(doc.added_at)}>{ago(doc.added_at)} via {doc.source}</td></tr>
                   <tr><th>Modified</th><td title={stamp(doc.modified_at)}>{ago(doc.modified_at)}</td></tr>
                   {doc.mirror_path && <tr><th>Mirror</th><td className="mono small">{doc.mirror_path}</td></tr>}
@@ -207,19 +214,19 @@ export default function DocumentPage() {
           </div>
           {isOwner && (hasPDFSource || isImage) && doc.status === 'done' && <div className="page-tools">
             {hasPDFSource && preview === 'pages' ? <span className="muted">{selPages.length ? `${selPages.length} selected` : 'Tap a page number to select the page'}</span> : <span className="muted">Whole file:</span>}
-            <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 90, pages: selPages }, 'Rotated')}>↻ 90°</button>
-            <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 270, pages: selPages }, 'Rotated')}>↺ 90°</button>
-            <button className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 180, pages: selPages }, 'Rotated')}>180°</button>
+            <button type="button" className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 90, pages: selPages }, 'Rotated')} title="Rotate right"><Icon name="rotate-cw" size={13} />90°</button>
+            <button type="button" className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 270, pages: selPages }, 'Rotated')} title="Rotate left"><Icon name="rotate-ccw" size={13} />90°</button>
+            <button type="button" className="btn xs" onClick={() => pageOp({ op: 'rotate', degrees: 180, pages: selPages }, 'Rotated')}>180°</button>
             {hasPDFSource && selPages.length > 0 && <>
-              <button className="btn xs" onClick={() => setSplitOpen(true)}>Split off → new document</button>
-              <button className="btn xs danger-text" onClick={() => pageOp({ op: 'delete', pages: selPages }, 'Pages removed')}>Delete pages</button>
-              <button className="btn ghost xs" onClick={() => setSelPages([])}>Clear</button>
+              <button type="button" className="btn xs" onClick={() => setSplitOpen(true)}><Icon name="scissors" size={13} />Split off into a new document</button>
+              <button type="button" className="btn xs danger-text" onClick={() => pageOp({ op: 'delete', pages: selPages }, 'Pages removed')}><Icon name="trash" size={13} />Delete pages</button>
+              <button type="button" className="btn ghost xs" onClick={() => setSelPages([])}>Clear</button>
             </>}
           </div>}
           {hasPDF && preview === 'pdf' && <iframe className="pdf-frame" src={`${V1}/documents/${doc.id}/preview#view=FitH`} title="PDF" />}
           {hasPDF && preview === 'pages' && <PageImages doc={doc} selected={selPages} onToggle={isOwner ? toggleSel : undefined} />}
           {!hasPDF && isImage && <div className="image-preview"><img src={`${V1}/documents/${doc.id}/preview`} alt="" /></div>}
-          {!hasPDF && !isImage && <div className="text-preview"><div className="muted small mb">{fileIcon(doc.mime, doc.original_name)} {doc.original_name} — no PDF twin (set GOTENBERG_URL to render office files); the text:</div><pre>{doc.content || 'No text.'}</pre></div>}
+          {!hasPDF && !isImage && <div className="text-preview"><div className="muted small mb row"><Icon name={fileIconName(doc.mime, doc.original_name)} size={15} />{doc.original_name} — no PDF twin (set GOTENBERG_URL to render office files); the text:</div><pre>{doc.content || 'No text.'}</pre></div>}
         </div>
       </div>
       {del && <Confirm title="Move to the trash?" message="It can be restored from the trash for a while." onCancel={() => setDel(false)} onConfirm={async () => { setDel(false); await api.del(`${V1}/documents/${doc.id}`); toast('Moved to trash'); bump(); navigate(nav.next ? `/documents/${nav.next}` : '/documents') }} label="Delete" />}
@@ -257,8 +264,8 @@ function SplitForm({ doc, pages, onClose, onDone }: { doc: Document; pages: numb
     <form onSubmit={go} className="grid" style={{ gap: 14 }}>
       <p className="muted small">Pages {pages.join(', ')} become a new document with the same tags, correspondent and type; OCR runs on it.</p>
       <Field label="Title"><input value={title} onChange={e => setTitle(e.target.value)} autoFocus /></Field>
-      <label className="row"><input type="checkbox" checked={remove} onChange={e => setRemove(e.target.checked)} style={{ width: 'auto' }} /> Take the pages out of this document (the old file is kept as a version)</label>
-      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Split</button></div>
+      <Toggle checked={remove} onChange={setRemove} label="Take the pages out of this document (the old file is kept as a version)" />
+      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>Split</button></div>
     </form>
   )
 }
@@ -271,7 +278,7 @@ function VersionsTab({ doc, onChange }: { doc: Document; onChange: () => Promise
   if (list.length === 0) return <p className="muted">No earlier files. Rotating pages, removing pages, splitting and replacing the file keep the previous file here.</p>
   return (
     <table className="table compact"><thead><tr><th>#</th><th>Why</th><th>File</th><th>When</th><th /></tr></thead><tbody>
-      {list.map(v => <tr key={v.id}><td className="muted">v{v.n}</td><td>{v.reason}<div className="muted small">{v.actor}</div></td><td className="muted small">.{v.ext} · {bytes(v.size)}</td><td className="muted small" title={stamp(v.created_at)}>{ago(v.created_at)}</td><td className="right nowrap"><a className="btn ghost xs" href={`${V1}/documents/${doc.id}/versions/${v.n}/download`}>Download</a><button className="btn ghost xs" onClick={async () => { try { await api.post(`${V1}/documents/${doc.id}/versions/${v.n}/restore`); toast('Restored; OCR running'); onChange() } catch (e) { toast((e as Error).message, 'err') } }}>Restore</button></td></tr>)}
+      {list.map(v => <tr key={v.id}><td className="muted">v{v.n}</td><td>{v.reason}<div className="muted small">{v.actor}</div></td><td className="muted small">.{v.ext} · {bytes(v.size)}</td><td className="muted small" title={stamp(v.created_at)}>{ago(v.created_at)}</td><td className="right nowrap"><a className="btn ghost xs" href={`${V1}/documents/${doc.id}/versions/${v.n}/download`}>Download</a><button type="button" className="btn ghost xs" onClick={async () => { try { await api.post(`${V1}/documents/${doc.id}/versions/${v.n}/restore`); toast('Restored; OCR running'); onChange() } catch (e) { toast((e as Error).message, 'err') } }}>Restore</button></td></tr>)}
     </tbody></table>
   )
 }
@@ -290,9 +297,9 @@ function ShareWithModal({ doc, users, onClose }: { doc: Document; users: { id: n
       <div className="row wrap mb">
         <Select className="auto" value={String(uid)} onChange={v => setUid(Number(v))} placeholder="Choose a person…" options={users.map(u => ({ value: String(u.id), label: u.name || u.email, hint: u.name ? u.email : undefined }))} />
         <Segmented size="sm" value={level} onChange={setLevel} options={[{ value: 'view', label: 'View' }, { value: 'edit', label: 'Edit' }]} />
-        <button className="btn primary sm" onClick={add} disabled={!uid}>Share</button>
+        <button type="button" className="btn primary sm" onClick={add} disabled={!uid}>Share</button>
       </div>
-      {!list ? <Loading /> : list.length === 0 ? <p className="muted small">Not shared with anyone.</p> : <table className="table compact"><tbody>{list.map(s => <tr key={s.user_id}><td>{s.name || s.email}</td><td><span className="badge">{s.level}</span></td><td className="muted small">{ago(s.created_at)}</td><td className="right"><button className="btn ghost xs danger-text" onClick={async () => { await api.del(`${V1}/documents/${doc.id}/shared_with/${s.user_id}`); load() }}>Remove</button></td></tr>)}</tbody></table>}
+      {!list ? <Loading /> : list.length === 0 ? <p className="muted small">Not shared with anyone.</p> : <table className="table compact"><tbody>{list.map(s => <tr key={s.user_id}><td>{s.name || s.email}</td><td><span className="badge">{s.level}</span></td><td className="muted small">{ago(s.created_at)}</td><td className="right"><button type="button" className="btn ghost xs danger-text" onClick={async () => { await api.del(`${V1}/documents/${doc.id}/shared_with/${s.user_id}`); load() }}>Remove</button></td></tr>)}</tbody></table>}
     </Modal>
   )
 }
@@ -313,7 +320,7 @@ function LanguageModal({ doc, onClose, onDone }: { doc: Document; onClose: () =>
         <Field label="Languages for this document" help={<>Tesseract codes joined with +. Installed: {installed.join(', ')}. Saved on the document; empty or the box default = the box default.</>}><input value={lang} onChange={e => setLang(e.target.value)} className="mono" /></Field>
         <div className="row wrap">{installed.map(l => <button key={l} type="button" className={`chip ${lang.split('+').includes(l) ? 'active' : ''}`} onClick={() => setLang(v => v.split('+').filter(Boolean).includes(l) ? v.split('+').filter(x => x && x !== l).join('+') : [...v.split('+').filter(Boolean), l].join('+'))}>{l}</button>)}</div>
         <Field label="Mode" group help={{ skip: 'Only pages without text.', redo: 'Redo scanned pages, keep real text.', force: 'Rasterise everything and OCR it all (replaces the text layer).' }[mode]}><Segmented value={mode} onChange={setMode} options={[{ value: 'skip', label: 'Skip text' }, { value: 'redo', label: 'Redo' }, { value: 'force', label: 'Force' }]} size="sm" /></Field>
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary">Run OCR</button></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary">Run OCR</button></div>
       </form>
     </Modal>
   )
@@ -398,10 +405,10 @@ function FieldsEditor({ fields, values, onChange }: { fields: CustomField[]; val
             : f.data_type === 'select' ? <Select value={v} onChange={x => set(f.id, x)} placeholder="—" clearLabel="none" options={(f.extra?.options || []).map(o => ({ value: o, label: o }))} />
             : f.data_type === 'date' ? <input type="date" value={v} onChange={e => set(f.id, e.target.value)} />
             : f.data_type === 'integer' || f.data_type === 'float' || f.data_type === 'monetary' ? <input value={v} inputMode="decimal" onChange={e => set(f.id, e.target.value)} placeholder={f.data_type === 'monetary' ? '0.00' : ''} />
-            : f.data_type === 'url' ? <span className="row grow"><input value={v} onChange={e => set(f.id, e.target.value)} placeholder="https://" />{v && <a className="btn ghost sm" href={v} target="_blank" rel="noreferrer">↗</a>}</span>
-            : f.data_type === 'documentlink' ? <span className="row grow"><input value={v} onChange={e => set(f.id, e.target.value)} placeholder="document id" inputMode="numeric" />{v && <Link className="btn ghost sm" to={`/documents/${v}`}>↗</Link>}</span>
+            : f.data_type === 'url' ? <span className="row grow"><input value={v} onChange={e => set(f.id, e.target.value)} placeholder="https://" />{v && <a className="btn ghost icon-only sm" href={v} target="_blank" rel="noreferrer" aria-label="Open the link"><Icon name="external" size={15} /></a>}</span>
+            : f.data_type === 'documentlink' ? <span className="row grow"><input value={v} onChange={e => set(f.id, e.target.value)} placeholder="document id" inputMode="numeric" />{v && <Link className="btn ghost icon-only sm" to={`/documents/${v}`} aria-label="Open the document"><Icon name="external" size={15} /></Link>}</span>
             : <input value={v} onChange={e => set(f.id, e.target.value)} />}
-          <button type="button" className="btn ghost xs" onClick={() => remove(f.id)} aria-label="Remove field">×</button>
+          <button type="button" className="btn ghost xs" onClick={() => remove(f.id)} aria-label="Remove field"><Icon name="x" size={14} /></button>
         </div>) })}
       {absent.length > 0 && <Select className="add-field" value="" onChange={x => { if (x) set(Number(x), '') }} placeholder="+ Add a field…" options={absent.map(f => ({ value: String(f.id), label: f.name, hint: FIELD_TYPES.find(t => t.value === f.data_type)?.label }))} />}
     </div>
@@ -422,8 +429,8 @@ function NotesTab({ doc, onChange }: { doc: Document; onChange: () => Promise<un
   }
   return (
     <div className="grid" style={{ gap: 12 }}>
-      <form onSubmit={add} className="grid" style={{ gap: 8 }}><textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write a note… (searchable)" rows={3} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') add(e) }} /><div className="row"><span className="spacer" /><button className="btn primary sm" disabled={!text.trim()}>Add note</button></div></form>
-      {!notes ? <Loading /> : notes.length === 0 ? <p className="muted">No notes yet.</p> : notes.map(n => <div key={n.id} className="note"><div className="note-text">{n.text}</div><div className="muted small row"><span>{users.find(u => u.id === n.user_id)?.name || 'you'} · <span title={stamp(n.created_at)}>{ago(n.created_at)}</span></span><span className="spacer" /><button className="link-btn small danger-text" onClick={async () => { await api.del(`${V1}/documents/${doc.id}/notes/${n.id}`); await load(); onChange() }}>delete</button></div></div>)}
+      <form onSubmit={add} className="grid" style={{ gap: 8 }}><textarea value={text} onChange={e => setText(e.target.value)} placeholder="Write a note… (searchable)" rows={3} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') add(e) }} /><div className="row"><span className="spacer" /><button type="submit" className="btn primary sm" disabled={!text.trim()}>Add note</button></div></form>
+      {!notes ? <Loading /> : notes.length === 0 ? <p className="muted">No notes yet.</p> : notes.map(n => <div key={n.id} className="note"><div className="note-text">{n.text}</div><div className="muted small row"><span>{users.find(u => u.id === n.user_id)?.name || 'you'} · <span title={stamp(n.created_at)}>{ago(n.created_at)}</span></span><span className="spacer" /><button type="button" className="link-btn small danger-text" onClick={async () => { await api.del(`${V1}/documents/${doc.id}/notes/${n.id}`); await load(); onChange() }}>delete</button></div></div>)}
     </div>
   )
 }
@@ -466,9 +473,9 @@ function ShareModal({ doc, onClose }: { doc: Document; onClose: () => void }) {
       <div className="row wrap mb">
         <Segmented size="sm" value={days} onChange={setDays} options={[{ value: 1, label: '1 day' }, { value: 7, label: '1 week' }, { value: 30, label: '1 month' }, { value: 0, label: 'No expiry' }]} />
         {doc.has_archive && <Segmented size="sm" value={file} onChange={setFile} options={[{ value: 'archive', label: 'PDF/A' }, { value: 'original', label: 'Original' }]} />}
-        <button className="btn primary sm" onClick={make}>Create link</button>
+        <button type="button" className="btn primary sm" onClick={make}>Create link</button>
       </div>
-      {!list ? <Loading /> : list.length === 0 ? <p className="muted small">No links yet.</p> : <table className="table compact"><tbody>{list.map(s => <tr key={s.id}><td className="mono small ellipsis" style={{ maxWidth: 260 }}><a href={s.url} target="_blank" rel="noreferrer">{s.url}</a></td><td className="muted small nowrap">{s.expires_at ? `until ${fmtDate(s.expires_at)}` : 'no expiry'} · {s.views} views</td><td className="right nowrap"><button className="btn ghost xs" onClick={() => navigator.clipboard?.writeText(s.url).then(() => toast('Copied'))}>Copy</button><button className="btn ghost xs danger-text" onClick={async () => { await api.del(`${V1}/shares/${s.id}`); load() }}>Revoke</button></td></tr>)}</tbody></table>}
+      {!list ? <Loading /> : list.length === 0 ? <p className="muted small">No links yet.</p> : <table className="table compact"><tbody>{list.map(s => <tr key={s.id}><td className="mono small ellipsis" style={{ maxWidth: 260 }}><a href={s.url} target="_blank" rel="noreferrer">{s.url}</a></td><td className="muted small nowrap">{s.expires_at ? `until ${fmtDate(s.expires_at)}` : 'no expiry'} · {s.views} views</td><td className="right nowrap"><button type="button" className="btn ghost xs" onClick={() => navigator.clipboard?.writeText(s.url).then(() => toast('Copied'))}>Copy</button><button type="button" className="btn ghost xs danger-text" onClick={async () => { await api.del(`${V1}/shares/${s.id}`); load() }}>Revoke</button></td></tr>)}</tbody></table>}
     </Modal>
   )
 }
@@ -493,7 +500,7 @@ function MoneyModal({ doc, onClose, onBooked }: { doc: Document; onClose: () => 
   }
   return (
     <Modal title="Book in Pocket Money" onClose={onClose}>
-      {!st ? <Loading /> : !st.connected ? <div className="callout">{st.error || 'Pocket Money is not connected.'} <span className="muted small">(Settings → Integrations)</span></div> : (
+      {!st ? <Loading /> : !st.connected ? <div className="callout"><Icon name="info" size={15} /><span>{st.error || 'Pocket Money is not connected.'} <Link to="/settings/integrations">Settings → Connected apps</Link></span></div> : (
         <form onSubmit={book} className="grid" style={{ gap: 12 }}>
           <div className="two-col tight">
             <Field label="Amount"><input value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} inputMode="decimal" required autoFocus placeholder="0.00" /></Field>
@@ -507,7 +514,7 @@ function MoneyModal({ doc, onClose, onBooked }: { doc: Document; onClose: () => 
           </div>
           <Field label="Description"><input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></Field>
           <p className="muted small">The transaction links back to this document. {guess && <>Amount taken from the “{amountField?.name}” field: {money(guess, form.currency)}.</>}</p>
-          <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>Book expense</button></div>
+          <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>Book expense</button></div>
         </form>
       )}
     </Modal>

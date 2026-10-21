@@ -4,6 +4,7 @@ import { useApp } from '../../lib/app-context'
 import type { MailAccount, MailAccountInput, MailFetchResult, MailRule, MailRuleInput, MailTestResult } from '../../lib/mail-types'
 import { ago } from '../../lib/format'
 import { Card, Confirm, Field, Loading, Modal, Segmented, Toggle, useAsync, useToast } from '../../components/ui'
+import { Icon } from '../../components/icons'
 import { Picker } from '../../components/Picker'
 import { Select } from '../../components/Select'
 
@@ -50,7 +51,7 @@ export default function MailSettings() {
   if (!accounts.data || !rules.data) return <Loading />
   return (
     <div className="grid" style={{ gap: 16 }}>
-      <Card title="Mail accounts" actions={<button className="btn primary sm" onClick={() => setEditAcct({ security: 'ssl', port: 993, enabled: true, poll_minutes: 10 })}>+ Add account</button>}>
+      <Card title="Mail accounts" actions={<button type="button" className="btn primary sm" onClick={() => setEditAcct({ security: 'ssl', port: 993, enabled: true, poll_minutes: 10 })}><Icon name="plus" size={15} />Add account</button>}>
         <p className="muted">Mailboxes checked over IMAP. Rules below say which messages become documents: attachments (PDFs, scans, office files) or the whole mail as <code>.eml</code>. A message is taken once per rule.</p>
         {accounts.data.length === 0 ? <p className="muted">No mail accounts yet.</p> : (
           <table className="table compact">
@@ -63,10 +64,10 @@ export default function MailSettings() {
                   <td className="small">{a.last_checked_at ? ago(a.last_checked_at) : <span className="muted">not yet</span>}{a.last_error && <div className="bad small" title={a.last_error}>{a.last_error.length > 80 ? a.last_error.slice(0, 80) + '…' : a.last_error}</div>}</td>
                   <td><Toggle checked={a.enabled} onChange={v => run(() => api.put(`${V1}/mail/accounts/${a.id}`, { enabled: v }), v ? 'Account enabled' : 'Account paused')} /></td>
                   <td className="right"><span className="row" style={{ justifyContent: 'flex-end' }}>
-                    <button className="btn ghost sm" disabled={busy === a.id} onClick={() => test(a)}>{busy === a.id ? '…' : 'Test'}</button>
-                    <button className="btn ghost sm" disabled={busy === a.id || !a.enabled} onClick={() => fetchNow(a)}>Fetch now</button>
-                    <button className="btn ghost sm" onClick={() => setEditAcct(a)}>Edit</button>
-                    <button className="btn ghost sm danger-text" onClick={() => setDelAcct(a)}>Delete</button>
+                    <button type="button" className="btn ghost sm" disabled={busy === a.id} onClick={() => test(a)}>{busy === a.id ? '…' : 'Test'}</button>
+                    <button type="button" className="btn ghost sm" disabled={busy === a.id || !a.enabled} onClick={() => fetchNow(a)}>Fetch now</button>
+                    <button type="button" className="btn ghost sm" onClick={() => setEditAcct(a)}>Edit</button>
+                    <button type="button" className="btn ghost sm danger-text" onClick={() => setDelAcct(a)}>Delete</button>
                   </span></td>
                 </tr>
               ))}
@@ -74,7 +75,7 @@ export default function MailSettings() {
           </table>
         )}
       </Card>
-      <Card title="Mail rules" actions={<button className="btn primary sm" disabled={accounts.data.length === 0} onClick={() => setEditRule({ account_id: accounts.data?.[0]?.id, folder: 'INBOX', enabled: true, only_unseen: true, consume: 'attachments', title_from: 'subject', correspondent_from: 'nothing', action: 'mark_read', assign_tags: [], max_age_days: 0 })}>+ Add rule</button>}>
+      <Card title="Mail rules" actions={<button type="button" className="btn primary sm" disabled={accounts.data.length === 0} onClick={() => setEditRule({ account_id: accounts.data?.[0]?.id, folder: 'INBOX', enabled: true, only_unseen: true, consume: 'attachments', title_from: 'subject', correspondent_from: 'nothing', action: 'mark_read', assign_tags: [], max_age_days: 0 })}><Icon name="plus" size={15} />Add rule</button>}>
         {rules.data.length === 0 ? <p className="muted">{accounts.data.length === 0 ? 'Add an account first.' : 'No rules yet: nothing is taken from the mailbox until a rule says so.'}</p> : (
           <table className="table compact">
             <thead><tr><th>Rule</th><th>Where</th><th>Takes</th><th>Assigns</th><th /><th /></tr></thead>
@@ -87,8 +88,8 @@ export default function MailSettings() {
                   <td className="small">{assignments(r) || <span className="muted">—</span>}</td>
                   <td><Toggle checked={r.enabled} onChange={v => run(() => api.put(`${V1}/mail/rules/${r.id}`, { enabled: v }), v ? 'Rule enabled' : 'Rule paused')} /></td>
                   <td className="right"><span className="row" style={{ justifyContent: 'flex-end' }}>
-                    <button className="btn ghost sm" onClick={() => setEditRule(r)}>Edit</button>
-                    <button className="btn ghost sm danger-text" onClick={() => setDelRule(r)}>Delete</button>
+                    <button type="button" className="btn ghost sm" onClick={() => setEditRule(r)}>Edit</button>
+                    <button type="button" className="btn ghost sm danger-text" onClick={() => setDelRule(r)}>Delete</button>
                   </span></td>
                 </tr>
               ))}
@@ -143,7 +144,7 @@ function AccountModal({ account, onClose, onSaved }: { account: Partial<MailAcco
         <div className="form-actions">
           {account.id && <button type="button" className="btn" onClick={test} disabled={busy}>Test</button>}
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy}>{account.id ? 'Save' : 'Add account'}</button>
+          <button type="submit" className="btn primary" disabled={busy}>{account.id ? 'Save' : 'Add account'}</button>
         </div>
         {!account.id && <p className="muted small">Save first, then Test signs in and lists the folders.</p>}
       </form>
@@ -223,7 +224,7 @@ function RuleModal({ rule, accounts, onClose, onSaved }: { rule: Partial<MailRul
           {f.action === 'move' && <Field label="Move to folder">{folderInput(f.action_folder, v => set({ action_folder: v }), 'Archive')}</Field>}
         </div>
         <Toggle checked={f.enabled} onChange={v => set({ enabled: v })} label="Rule enabled" />
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>{rule.id ? 'Save' : 'Add rule'}</button></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{rule.id ? 'Save' : 'Add rule'}</button></div>
       </form>
     </Modal>
   )
