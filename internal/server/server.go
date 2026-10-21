@@ -352,6 +352,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/documents/{id}/shares", s.handleCreateShare)
 			r.Get("/documents/{id}/jobs", s.handleDocumentJobs)
 			r.Post("/documents/{id}/money", s.handleBookMoney)
+			r.Post("/documents/{id}/collab", s.handleCollabSend)
+			r.Get("/collab/lookup", s.handleCollabLookup)
 			r.Post("/documents/{id}/pages", s.handlePages)
 			r.Post("/documents/{id}/replace", s.handleReplaceFile)
 			r.Get("/documents/{id}/versions", s.handleListVersions)

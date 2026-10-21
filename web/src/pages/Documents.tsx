@@ -6,6 +6,7 @@ import type { Document, ListResult, SavedView } from '../lib/types'
 import { docsURL, plural } from '../lib/format'
 import { Card, Confirm, Empty, Field, Loading, Menu, Modal, Segmented, useToast } from '../components/ui'
 import { DocCard, DocRow } from '../components/docs'
+import { ReviewsProvider } from '../components/Review'
 import { Picker } from '../components/Picker'
 import { Select } from '../components/Select'
 
@@ -155,12 +156,14 @@ export default function Documents() {
         {loading && !data ? <Loading /> : !data || data.results.length === 0 ? <Empty title={params.q || activeFilters ? 'Nothing matches' : 'No documents yet'}>{params.q || activeFilters ? 'Try fewer filters or other words. Searches match word beginnings, and fall back to substrings.' : 'Upload a scan or drop a file into the consume folder.'}</Empty> : (
           <>
             <div className="muted small list-count">{plural(total, 'document')}{params.q && ` for “${params.q}”`}{loading && ' …'}</div>
+            <ReviewsProvider ids={data.results.map(d => d.id)}>
             {view === 'cards' && <div className="doc-grid">{data.results.map(d => <DocCard key={d.id} d={d} selected={sel.has(d.id)} onSelect={e => toggleSel(d.id, e)} />)}</div>}
             {view === 'list' && <div className="doc-list">{data.results.map(d => <DocCard key={d.id} d={d} selected={sel.has(d.id)} onSelect={e => toggleSel(d.id, e)} onOpen={() => openFirst(d)} />)}</div>}
             {view === 'table' && <div className="table-wrap"><table className="table docs-table">
               <thead><tr><th className="sel"><input type="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(data.results.map(d => d.id)))} /></th><th />{cols.map(c => <th key={c} className={['asn', 'pages', 'notes'].includes(c) ? 'num' : ''}><SortHead col={c} sort={params.sort} onSort={s => set({ sort: s })} label={ALL_COLS.find(([k]) => k === c)?.[1] || tax.custom_fields.find(f => 'cf:' + f.id === c)?.name || c} /></th>)}</tr></thead>
               <tbody>{data.results.map(d => <DocRow key={d.id} d={d} cols={cols} selected={sel.has(d.id)} onSelect={e => toggleSel(d.id, e)} />)}</tbody>
             </table></div>}
+            </ReviewsProvider>
             {pages > 1 && <div className="pager"><button className="btn sm" disabled={params.page <= 1} onClick={() => set({ page: params.page - 1 })}>← Previous</button><span className="muted small">Page {params.page} of {pages}</span><button className="btn sm" disabled={params.page >= pages} onClick={() => set({ page: params.page + 1 })}>Next →</button></div>}
           </>
         )}

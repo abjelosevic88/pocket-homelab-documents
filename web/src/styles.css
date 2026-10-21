@@ -494,3 +494,10 @@ button.chip-tag { cursor: pointer; }
 .field-row .sel, .row .sel.auto { width: auto; min-width: 160px; }
 .sel.add-field { width: auto; min-width: 200px; }
 .sel.add-field .sel-btn { color: var(--muted); border-style: dashed; }
+
+/* ---- review badge (Pocket Collaborator) ---- */
+.review-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); white-space: nowrap; margin-left: 6px; vertical-align: middle; }
+.review-badge:hover { border-color: #c026d3; text-decoration: none; }
+.review-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #c026d3; }
+.review-badge.changes_requested .dot { background: var(--warning); } .review-badge.approved .dot { background: var(--success); } .review-badge.rejected .dot, .review-badge.cancelled .dot, .review-badge.draft .dot { background: var(--muted); }
+.review-badge.sm { font-size: 10.5px; padding: 1px 7px; }

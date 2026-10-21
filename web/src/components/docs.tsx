@@ -38,13 +38,17 @@ export function Snippet({ s }: { s: string }) {
   return <span className="snippet">{snippetParts(s).map((p, i) => p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>)}</span>
 }
 
+import { ReviewBadge, useReview } from './Review'
+
 export function DocCard({ d, selected, onSelect, onOpen }: { d: Document; selected?: boolean; onSelect?: (e: React.MouseEvent) => void; onOpen?: () => void }) {
+  const review = useReview(d.id)
   return (
     <div className={`doc-card ${selected ? 'selected' : ''} ${d.status}`}>
       {onSelect && <label className="sel" onClick={e => e.stopPropagation()}><input type="checkbox" checked={!!selected} onChange={() => {}} onClick={onSelect} /></label>}
       <Link to={`/documents/${d.id}`} className="doc-thumb" onClick={e => { if (onOpen) { e.preventDefault(); onOpen() } }}><Thumb d={d} size="lg" /></Link>
       <div className="doc-body">
         <Link to={`/documents/${d.id}`} className="doc-title" title={d.title}>{d.favorite && <span className="star">★</span>}<StatusDot d={d} />{d.title}</Link>
+        <ReviewBadge review={review} small />
         <div className="muted small ellipsis">{d.owner_name && <span className="badge cat" style={{ marginRight: 4 }}>⇄ {d.owner_name}</span>}{d.correspondent_name || <span className="muted">—</span>}{d.document_type_name && <> · {d.document_type_name}</>}</div>
         {d.snippet ? <div className="small doc-snippet"><Snippet s={d.snippet} /></div> : null}
         <div className="doc-foot"><span className="muted small">{fmtDate(d.created)}</span><TagList ids={d.tags} names={d.shared_tags} small max={3} /></div>
@@ -55,11 +59,12 @@ export function DocCard({ d, selected, onSelect, onOpen }: { d: Document; select
 
 export function DocRow({ d, selected, onSelect, cols }: { d: Document; selected?: boolean; onSelect?: (e: React.MouseEvent) => void; cols: string[] }) {
   const { tax } = useApp()
+  const review = useReview(d.id)
   const cell = (c: string) => {
     switch (c) {
       case 'asn': return <td className="mono muted num">{d.asn ?? ''}</td>
       case 'correspondent': return <td className="ellipsis">{d.correspondent_name}</td>
-      case 'title': return <td className="title-cell"><Link to={`/documents/${d.id}`}>{d.favorite && <span className="star">★</span>}<StatusDot d={d} />{d.title}</Link>{d.owner_name && <span className="badge cat" style={{ marginLeft: 6 }}>⇄ {d.owner_name}</span>}{d.snippet && <div className="small doc-snippet"><Snippet s={d.snippet} /></div>}</td>
+      case 'title': return <td className="title-cell"><Link to={`/documents/${d.id}`}>{d.favorite && <span className="star">★</span>}<StatusDot d={d} />{d.title}</Link>{d.owner_name && <span className="badge cat" style={{ marginLeft: 6 }}>⇄ {d.owner_name}</span>}<ReviewBadge review={review} small />{d.snippet && <div className="small doc-snippet"><Snippet s={d.snippet} /></div>}</td>
       case 'type': return <td className="ellipsis">{d.document_type_name}</td>
       case 'tags': return <td><TagList ids={d.tags} names={d.shared_tags} small max={4} /></td>
       case 'created': return <td className="muted nowrap">{fmtDate(d.created)}</td>

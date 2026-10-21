@@ -29,6 +29,7 @@ var linkOffers = []core.Offer{
 // linkUses: a document (an invoice, a receipt) can be booked as a transaction in Pocket Money.
 var linkUses = []core.Use{
 	{App: "money", Scopes: []string{"accounts:read", "transactions:write"}, Reason: "Book an invoice or receipt as a transaction in Pocket Money, with a link back to the document"},
+	{App: "collaborator", Scopes: []string{"reviews:read", "reviews:write"}, Reason: "Send a document's PDF for review in Pocket Collaborator, and show which documents are in review"},
 }
 
 type linkRoute struct {

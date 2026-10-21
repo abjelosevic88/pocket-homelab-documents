@@ -6,6 +6,7 @@ import { FIELD_TYPES } from '../lib/types'
 import type { Document, HistoryEntry, Job, Note, Share, Suggestions, CustomField, FieldValue, Version, DocShare } from '../lib/types'
 import { ago, bytes, fileIcon, fmtDate, money, plural, stamp } from '../lib/format'
 import { Card, Confirm, Field, Loading, Menu, Modal, Segmented, Tabs, useToast } from '../components/ui'
+import { ReviewAction } from '../components/Review'
 import { Picker } from '../components/Picker'
 import { TagChip } from '../components/docs'
 import { Select } from '../components/Select'
@@ -124,6 +125,7 @@ export default function DocumentPage() {
         {doc.status !== 'done' && <span className={`badge st-${doc.status}`}>{doc.status === 'failed' ? 'OCR failed' : doc.status === 'processing' ? 'OCR running…' : 'waiting for OCR'}</span>}
         <button className={`btn sm ${form.favorite ? 'on' : ''}`} onClick={() => setForm({ ...form, favorite: !form.favorite })} title="Favourite">{form.favorite ? '★' : '☆'}</button>
         <a className="btn sm" href={`${V1}/documents/${doc.id}/download`}>⇣ {doc.has_archive ? 'PDF' : 'Download'}</a>
+        {isOwner && <ReviewAction doc={doc} />}
         <Menu align="right" button={<button className="btn sm">More ▾</button>}>
           {doc.has_archive && <a href={`${V1}/documents/${doc.id}/download?original=1`}>Download original ({doc.original_name.split('.').pop()?.toUpperCase()})</a>}
           <a href={`${V1}/documents/${doc.id}/preview`} target="_blank" rel="noreferrer">Open in a new tab</a>
