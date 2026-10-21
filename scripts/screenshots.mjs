@@ -37,7 +37,7 @@ async function shot(name, path, { w = 1280, h = 860, dark = false, mobile = fals
   log('start', name)
   await s('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: mobile ? 2 : 1, mobile })
   if (themeScript) await s('Page.removeScriptToEvaluateOnNewDocument', { identifier: themeScript })
-  const ls = { 'pd-theme': dark ? 'dark' : 'light', 'pd-view': 'table', 'pd-filters': '1', 'pd-preview': 'pages', 'pd-cols': JSON.stringify(['asn', 'correspondent', 'title', 'type', 'tags', 'created', 'cf:1']), ...prefs }
+  const ls = { 'pd-theme-mode': dark ? 'dark' : 'light', 'pd-view': 'table', 'pd-filters': '1', 'pd-preview': 'pages', 'pd-cols': JSON.stringify(['asn', 'correspondent', 'title', 'type', 'tags', 'created', 'cf:1']), ...prefs }
   themeScript = (await s('Page.addScriptToEvaluateOnNewDocument', { source: Object.entries(ls).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join('') })).result.identifier
   await s('Page.navigate', { url: BASE + path }); await sleep(wait)
   if (before) { log(' ', await before()); await sleep(1300) }
@@ -54,9 +54,9 @@ await shot('serbian', '/documents?q=' + encodeURIComponent('Бања Лука'),
 await shot('pages', `/documents/${lease.id}`, { wait: 3500, before: async () => { await clickText('.pn', '1'); return 'selected' } })
 await shot('upload', '/upload')
 await shot('rules', '/manage?tab=rules')
-await shot('ocr', '/settings?tab=ocr')
-await shot('folder', '/settings?tab=folder', { before: () => clickText('.storage-kind', 'Nextcloud') })
-await shot('mail', '/settings?tab=mail')
+await shot('ocr', '/settings/ocr')
+await shot('folder', '/settings/folder', { before: () => clickText('.storage-kind', 'Nextcloud') })
+await shot('mail', '/settings/mail')
 await shot('jobs', '/jobs')
 await shot('dark', `/documents/${nalaz.id}`, { dark: true, wait: 3500 })
 await shot('mobile-list', '/documents', { w: 390, h: 844, mobile: true, prefs: { 'pd-view': 'list', 'pd-filters': '0' } })
