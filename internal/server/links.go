@@ -45,6 +45,9 @@ var linkRoutes = []linkRoute{
 	{"POST", regexp.MustCompile(`^/api/v1/documents(/post_document)?$`), "documents:write"},
 	{"PUT PATCH", regexp.MustCompile(`^/api/v1/documents/\d+$`), "documents:write"},
 	{"POST", regexp.MustCompile(`^/api/v1/documents/\d+/notes$`), "documents:write"},
+	// Pocket Office saves an edited office file back into the archive (the old file stays as a version)
+	{"POST", regexp.MustCompile(`^/api/v1/documents/\d+/replace$`), "documents:write"},
+	{"DELETE", regexp.MustCompile(`^/api/v1/documents/\d+$`), "documents:write"},
 	{"POST", regexp.MustCompile(`^/api/v1/(tags|correspondents|document_types)$`), "documents:write"},
 }
 
