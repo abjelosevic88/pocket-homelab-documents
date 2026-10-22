@@ -10,6 +10,7 @@ import { Sidebar, type UploadKind } from './Sidebar'
 import { SearchPalette, type PaletteCommand } from './SearchPalette'
 import { ShortcutsSheet } from './ShortcutsSheet'
 import { Avatar, type MenuItem, MenuButton, modalOpen, useIsMobile, useMediaQuery } from './ui'
+import { AskButton } from './AskButton'
 
 const SIDEBAR_KEY = 'pd-sidebar'
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.gif,.bmp,.heic,.docx,.xlsx,.pptx,.odt,.ods,.odp,.rtf,.txt,.md,.csv,.html,.htm,.eml,.json'
@@ -166,6 +167,7 @@ function TopBar({ onMenu, onPalette, mobile, compact, sidebarOpen, crumb }: { on
       {mobile
         ? <button type="button" className="btn ghost icon-only" onClick={onPalette} aria-label="Search" title="Search (⌘K or /)"><Icon name="search" size={18} /></button>
         : <button type="button" className="top-search" onClick={onPalette} aria-label="Search documents" title="Search (⌘K or /)"><Icon name="search" size={16} /><span className="grow">Search documents…</span><kbd>⌘K</kbd></button>}
+      {mobile && <AskButton />}
       <MenuButton label="Account" className="avatar-btn" align="right" width={220} items={avatarMenu}>
         <Avatar name={user?.name} email={user?.email} size={30} />
       </MenuButton>
