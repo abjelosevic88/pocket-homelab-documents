@@ -167,7 +167,7 @@ function TopBar({ onMenu, onPalette, mobile, compact, sidebarOpen, crumb }: { on
       {mobile
         ? <button type="button" className="btn ghost icon-only" onClick={onPalette} aria-label="Search" title="Search (⌘K or /)"><Icon name="search" size={18} /></button>
         : <button type="button" className="top-search" onClick={onPalette} aria-label="Search documents" title="Search (⌘K or /)"><Icon name="search" size={16} /><span className="grow">Search documents…</span><kbd>⌘K</kbd></button>}
-      {mobile && <AskButton />}
+      <AskButton />
       <MenuButton label="Account" className="avatar-btn" align="right" width={220} items={avatarMenu}>
         <Avatar name={user?.name} email={user?.email} size={30} />
       </MenuButton>
