@@ -5,7 +5,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import type { APIToken, Settings as SettingsT, User, Job, FolderInfo, FolderKind, Language } from '../lib/types'
 import { ago, bytes, stamp } from '../lib/format'
-import { Confirm, CopyField, Field, Loading, Modal, Segmented, SettingRow, Switch, Tabs, Toggle, useAsync, useIsMobile, useToast } from '../components/ui'
+import { Confirm, CopyField, Field, Loading, Modal, NeedsCore, Segmented, SettingRow, Switch, Tabs, Toggle, useAsync, useIsMobile, useToast } from '../components/ui'
 import { Avatar } from '../components/people'
 import { Icon } from '../components/icons'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
@@ -292,7 +292,7 @@ function Folder() {
   const [test, setTest] = useState<{ where: string; files: number; folders: number; inbox_files: number } | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
-    if (data) setF({ kind: data.kind || 'none', path: data.path || (data.roots?.[0] ? `${data.roots[0]}` : ''), url: data.url, user: data.user, password: '', folder: data.folder || 'Documents', via_core: data.kind === 'nextcloud' ? data.via_core : !!data.core_nextcloud, file: data.file || 'archive', inbox: data.inbox, inbox_name: data.inbox_name || 'Inbox' })
+    if (data) setF({ kind: data.kind || 'none', path: data.path || (data.roots?.[0] ? `${data.roots[0]}` : ''), url: data.url, user: data.user, password: '', folder: data.folder || 'Documents', via_core: data.core && (data.kind === 'nextcloud' ? data.via_core : !!data.core_nextcloud), file: data.file || 'archive', inbox: data.inbox, inbox_name: data.inbox_name || 'Inbox' })
   }, [data])
   if (!data) return <Loading />
   const st = data.status || {}
@@ -316,13 +316,15 @@ function Folder() {
       </Section>
       <Section title="Change the folder">
         <div className="storage-kinds">
-          {FOLDER_KINDS.filter(k => (k.kind !== 'folder' || (data.roots && data.roots.length)) && (k.kind !== 'files' || data.core)).map(k => (
-            <button type="button" key={k.kind} className={`storage-kind ${f.kind === k.kind ? 'active' : ''}`} onClick={() => set({ kind: k.kind })}><b className="row" style={{ gap: 7 }}><Icon name={k.icon} size={15} />{k.title}</b><small className="muted">{k.sub}</small></button>
+          {/* Pocket Files is always listed; without Pocket Core it is greyed out with a word on why. */}
+          {FOLDER_KINDS.filter(k => k.kind !== 'folder' || (data.roots && data.roots.length)).map(k => (
+            <button type="button" key={k.kind} className={`storage-kind ${f.kind === k.kind ? 'active' : ''}`} disabled={k.kind === 'files' && !data.core} onClick={() => set({ kind: k.kind })}><b className="row" style={{ gap: 7 }}><Icon name={k.icon} size={15} />{k.title}</b><small className="muted">{k.sub}</small></button>
           ))}
         </div>
+        {!data.core && <NeedsCore className="mt" />}
         <div className="stack mt" style={{ maxWidth: 640 }}>
           {f.kind === 'nextcloud' && <>
-            {data.core && <Field group label="Account"><Segmented value={f.via_core ? 'core' : 'own'} onChange={v => set({ via_core: v === 'core' })} options={[{ value: 'core', label: 'Through Pocket Core' }, { value: 'own', label: 'Type it in' }]} /></Field>}
+            <Field group label="Account"><Segmented value={f.via_core && data.core ? 'core' : 'own'} onChange={v => set({ via_core: v === 'core' })} options={[{ value: 'core', label: 'Through Pocket Core', disabled: !data.core }, { value: 'own', label: 'Type it in' }]} /></Field>
             {f.via_core && data.core ? (
               data.core_nextcloud ? <p className="muted">Pocket Core connects you as <b>{data.core_nextcloud.user}</b> at {data.core_nextcloud.url}. Nothing to type.</p> : <div className="callout warning"><Icon name="alert" size={15} /><span>Pocket Core has no Nextcloud account for you{data.core_nextcloud_error ? `: ${data.core_nextcloud_error}` : ''}. Add one in Core → Services, or type it in.</span></div>
             ) : <>
@@ -335,7 +337,7 @@ function Folder() {
             <Field label="Folder in your Nextcloud" help="Made when missing. The Nextcloud client syncs it to your computers; the phone app can upload scans straight into its Inbox."><input value={f.folder} onChange={e => set({ folder: e.target.value })} placeholder="Documents" /></Field>
           </>}
           {f.kind === 'files' && <>
-            {data.core_files ? <p className="muted">Pocket Core lets this app into your Pocket Files{data.core_files_url ? <> at {data.core_files_url}</> : null}, as you and only you. Nothing to type.</p> : <div className="callout warning"><Icon name="alert" size={15} /><span>Pocket Files cannot be reached through Pocket Core{data.core_files_error ? `: ${data.core_files_error}` : ''}. Turn the Documents → Files link on in Core (Links, or Settings → Apps acting for me).</span></div>}
+            {!data.core ? <div className="callout warning"><Icon name="alert" size={15} /><span>Pocket Files is reached through Pocket Core, and this server is not connected to one: choose another place.</span></div> : data.core_files ? <p className="muted">Pocket Core lets this app into your Pocket Files{data.core_files_url ? <> at {data.core_files_url}</> : null}, as you and only you. Nothing to type.</p> : <div className="callout warning"><Icon name="alert" size={15} /><span>Pocket Files cannot be reached through Pocket Core{data.core_files_error ? `: ${data.core_files_error}` : ''}. Turn the Documents → Files link on in Core (Links, or Settings → Apps acting for me).</span></div>}
             <Field label="Folder in your Pocket Files" help="Made when missing. Drop scans into its Inbox from the Pocket Files page or any WebDAV client."><input value={f.folder} onChange={e => set({ folder: e.target.value })} placeholder="Documents" /></Field>
           </>}
           {f.kind === 'webdav' && <>
@@ -392,8 +394,10 @@ function Integrations() {
           {money && <span className="set-app-status small"><span className={`set-status ${money.connected ? 'ok' : f.money_mode === 'off' ? '' : 'warn'}`} />{money.connected ? `Connected via ${money.via}` : 'Not connected'}</span>}
         </div>
         <div className="set-app-controls">
-          <Segmented value={f.money_mode} onChange={v => setF({ ...f, money_mode: v })} label="Connection" options={[{ value: 'core', label: 'Pocket Core' }, { value: 'direct', label: 'Direct' }, { value: 'off', label: 'Off' }]} size="sm" />
+          {/* Without Pocket Core a saved "core" does nothing, so it shows as Off. */}
+          <Segmented value={!f.core_ready && f.money_mode === 'core' ? 'off' : f.money_mode} onChange={v => setF({ ...f, money_mode: v })} label="Connection" options={[{ value: 'core', label: 'Pocket Core', disabled: !f.core_ready }, { value: 'direct', label: 'Direct' }, { value: 'off', label: 'Off' }]} size="sm" />
         </div>
+        {!f.core_ready && <NeedsCore />}
         {f.money_mode === 'direct' && <div className="set-app-direct">
           <Field label="Money URL"><input value={f.money_url} onChange={e => setF({ ...f, money_url: e.target.value })} placeholder="https://money.example.com" spellCheck={false} /></Field>
           <Field label="Money API token" help={f.money_token_set ? 'A token is saved; enter a new one to replace it.' : undefined}><input type="password" value={token} onChange={e => setToken(e.target.value)} autoComplete="off" /></Field>

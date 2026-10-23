@@ -627,7 +627,7 @@ func (s *Server) handleGetFolder(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{
 		"kind": st.FolderKind, "path": st.FolderPath, "url": st.FolderURL, "user": st.FolderUser, "folder": st.FolderName, "via_core": st.FolderViaCore,
 		"password_set": st.FolderPassword != "", "file": st.FolderFile, "inbox": st.FolderInbox, "inbox_name": st.FolderInboxName,
-		"roots": s.cfg.FolderRoots, "core": s.core.Configured(), "status": map[string]any{},
+		"roots": s.cfg.FolderRoots, "core": s.coreReady(), "status": map[string]any{},
 	}
 	if f, err := s.folderFor(ctx, uid); err != nil {
 		out["status"] = map[string]any{"error": err.Error()}

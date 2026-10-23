@@ -230,6 +230,14 @@ func (s *Server) resolveSibling(ctx context.Context, slug string) string {
 	return url
 }
 
+// coreReady reports whether this server is configured for Pocket Core and its
+// last registration went through; settings grey out Core-only choices otherwise.
+func (s *Server) coreReady() bool {
+	s.coreMu.Lock()
+	defer s.coreMu.Unlock()
+	return s.core.Configured() && s.coreOK
+}
+
 // coreStatus summarises the Pocket Core link for the About page.
 func (s *Server) coreStatus() map[string]any {
 	s.coreMu.Lock()

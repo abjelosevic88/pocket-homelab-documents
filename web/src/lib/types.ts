@@ -99,6 +99,8 @@ export interface Settings {
   money_account: number
   notify_url: string
   core: boolean
+  /** configured and registered: Core-only choices are greyed out otherwise */
+  core_ready: boolean
   tools: Tools
   max_upload_bytes: number
   ocr_workers: number

@@ -133,6 +133,7 @@ func TestFolderInPocketFiles(t *testing.T) {
 	_, otherTok := h.user("other@example.com")
 	ff := newFakeFiles(t)
 	h.s.core = core.New(ff.core.URL, core.Options{Token: "pca_test"})
+	h.s.coreOK = true // registered: the settings offer Core-only places
 
 	var info map[string]any
 	h.do(tok, "GET", "/api/v1/folder", nil, &info)

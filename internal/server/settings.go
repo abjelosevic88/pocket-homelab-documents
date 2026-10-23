@@ -32,6 +32,7 @@ func (s *Server) publicSettings(r *http.Request, st store.Settings) map[string]a
 		"money_mode": st.MoneyMode, "money_url": st.MoneyURL, "money_token_set": st.MoneyToken != "", "money_account": st.MoneyAccount,
 		"notify_url":       st.NotifyURL,
 		"core":             s.core.Configured(),
+		"core_ready":       s.coreReady(),
 		"tools":            tools,
 		"max_upload_bytes": s.cfg.MaxUploadBytes,
 		"ocr_workers":      s.cfg.OCRWorkers,

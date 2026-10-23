@@ -329,6 +329,7 @@ button.chip-tag { cursor: pointer; }
 .storage-kind { font: inherit; text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); cursor: pointer; transition: border-color .12s, box-shadow .12s; }
 .storage-kind:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
 .storage-kind.active { border-color: var(--accent); background: var(--accent-soft); }
+.storage-kind:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; border-color: var(--border); }
 .storage-kind small { font-size: 12px; line-height: 1.4; }
 .lang-grid { display: flex; flex-wrap: wrap; gap: 6px; }
 .lang-grid .chip code { font-size: 11px; color: var(--muted); }
