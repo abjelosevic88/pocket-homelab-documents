@@ -18,7 +18,7 @@ import (
 	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 )
 
-// Pocket Collaborator: a document (its PDF/A twin, or the original when it is
+// Pocket Review: a document (its PDF/A twin, or the original when it is
 // a PDF) can be sent for review. The review keeps "documents:<id>" as its
 // source, so the archive shows an "in review" badge and a second send
 // becomes a new revision. Reached through a Core app link as the person.
@@ -43,11 +43,11 @@ func (s *Server) collabFor(ctx context.Context, email string) (*collabLink, erro
 	if !s.core.Configured() {
 		return nil, errors.New("there is no Pocket Core on this box")
 	}
-	lt, err := s.core.ActAs(ctx, email, "collaborator", collabScopes...)
+	lt, err := s.core.ActAs(ctx, email, "review", collabScopes...)
 	if err != nil {
 		var le *core.LinkError
 		if errors.As(err, &le) {
-			return nil, errors.New("Pocket Collaborator through Pocket Core: " + firstNonEmpty(strings.ReplaceAll(linkReason(le.Reason), "Money", "Collaborator"), le.Message))
+			return nil, errors.New("Pocket Review through Pocket Core: " + firstNonEmpty(strings.ReplaceAll(linkReason(le.Reason), "Money", "Pocket Review"), le.Message))
 		}
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (l *collabLink) do(ctx context.Context, method, path string, body io.Reader
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(raw, &e)
-		return fmt.Errorf("pocket collaborator: %s", firstNonEmpty(e.Error, http.StatusText(res.StatusCode)))
+		return fmt.Errorf("pocket review: %s", firstNonEmpty(e.Error, http.StatusText(res.StatusCode)))
 	}
 	if out != nil && len(raw) > 0 {
 		return json.Unmarshal(raw, out)
@@ -131,7 +131,7 @@ func (s *Server) handleCollabLookup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleCollabSend sends the document's PDF to Pocket Collaborator.
+// handleCollabSend sends the document's PDF to Pocket Review.
 func (s *Server) handleCollabSend(w http.ResponseWriter, r *http.Request) {
 	ctx, uid := r.Context(), me(r)
 	u := userFrom(ctx)
@@ -154,7 +154,7 @@ func (s *Server) handleCollabSend(w http.ResponseWriter, r *http.Request) {
 	}
 	path, name, ctype := s.bestFile(d)
 	if ctype != "application/pdf" {
-		writeErr(w, http.StatusBadRequest, "this document has no PDF yet (Collaborator reviews PDFs); run OCR or set GOTENBERG_URL so office files get a PDF twin")
+		writeErr(w, http.StatusBadRequest, "this document has no PDF yet (Pocket Review works on PDFs); run OCR or set GOTENBERG_URL so office files get a PDF twin")
 		return
 	}
 	pdf, err := os.ReadFile(path)

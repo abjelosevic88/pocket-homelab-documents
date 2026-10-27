@@ -24,7 +24,7 @@ export function ReviewsProvider({ ids, children }: { ids: number[]; children: Re
 
 export function ReviewBadge({ review, small }: { review?: ReviewHit | null; small?: boolean }) {
   if (!review) return null
-  return <a className={`review-badge ${review.status} ${small ? 'sm' : ''}`} href={review.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title={`${review.title} — v${review.revisions}, ${reviewStatusLabel[review.status] || review.status}. Open in Pocket Collaborator`}>
+  return <a className={`review-badge ${review.status} ${small ? 'sm' : ''}`} href={review.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title={`${review.title} — v${review.revisions}, ${reviewStatusLabel[review.status] || review.status}. Open in Pocket Review`}>
     <span className="dot" />{reviewStatusLabel[review.status] || review.status}{!small && review.open_threads > 0 ? ` · ${review.open_threads} open` : ''}
   </a>
 }
@@ -39,7 +39,7 @@ export function ReviewAction({ doc }: { doc: Document }) {
   const active = st.review && !finished(st.review.status) ? st.review : undefined
   return <>
     {st.review && <ReviewBadge review={st.review} />}
-    {st.available && <button type="button" className="btn sm" onClick={() => setOpen(true)} title="Send this document's PDF to Pocket Collaborator">{active ? 'New revision…' : 'Send for review…'}</button>}
+    {st.available && <button type="button" className="btn sm" onClick={() => setOpen(true)} title="Send this document's PDF to Pocket Review">{active ? 'New revision…' : 'Send for review…'}</button>}
     {open && <SendReview doc={doc} existing={active} onClose={() => { setOpen(false); load() }} />}
   </>
 }
@@ -53,13 +53,13 @@ function SendReview({ doc, existing, onClose }: { doc: Document; existing?: Revi
   const [done, setDone] = useState<{ url: string; created: boolean; revision: number } | null>(null)
   const send = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr('')
-    try { const r = await api.post<{ url: string; created: boolean; revision: number }>(`${V1}/documents/${doc.id}/collab`, { ...f, mode: existing ? mode : 'new' }); setDone(r); toast(r.created ? 'Review started in Pocket Collaborator' : `Sent as revision v${r.revision}`) } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+    try { const r = await api.post<{ url: string; created: boolean; revision: number }>(`${V1}/documents/${doc.id}/collab`, { ...f, mode: existing ? mode : 'new' }); setDone(r); toast(r.created ? 'Review started in Pocket Review' : `Sent as revision v${r.revision}`) } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
   return (
     <Modal title={`Send “${doc.title}” for review`} onClose={onClose}>
       {done ? <div className="grid" style={{ gap: 12 }}>
         <div className="callout success">{done.created ? 'A review was created.' : `Revision v${done.revision} was added.`}</div>
-        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Close</button><a className="btn primary" href={done.url} target="_blank" rel="noreferrer">Open in Collaborator<Icon name="external" size={14} /></a></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Close</button><a className="btn primary" href={done.url} target="_blank" rel="noreferrer">Open in Pocket Review<Icon name="external" size={14} /></a></div>
       </div> : <form onSubmit={send} className="grid" style={{ gap: 14 }}>
         {existing && <Field label="This document is already in review" group>
           <div className="row wrap" style={{ gap: 8 }}><ReviewBadge review={existing} /><span className="muted small">{existing.title} · v{existing.revisions}</span></div>
@@ -74,7 +74,7 @@ function SendReview({ doc, existing, onClose }: { doc: Document; existing?: Revi
           </div>
         </>}
         {existing && mode === 'revision' && <Field label="What changed?"><input value={f.note} onChange={e => setF(x => ({ ...x, note: e.target.value }))} placeholder="Optional note for the reviewers" /></Field>}
-        <p className="muted small">The {doc.has_archive ? 'PDF/A twin' : 'PDF'} is sent; the review links back to this document. People and roles are added in Collaborator.</p>
+        <p className="muted small">The {doc.has_archive ? 'PDF/A twin' : 'PDF'} is sent; the review links back to this document. People and roles are added in Pocket Review.</p>
         {err && <div className="callout danger"><Icon name="alert" size={15} /><span>{err}</span></div>}
         <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{busy ? 'Sending…' : existing && mode === 'revision' ? 'Send revision' : 'Send for review'}</button></div>
       </form>}
