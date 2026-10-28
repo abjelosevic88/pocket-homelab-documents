@@ -310,4 +310,15 @@ type Settings struct {
 	MoneyToken    string `json:"-"`
 	MoneyAccount  int64  `json:"money_account"`
 	NotifyURL     string `json:"notify_url"` // Apprise / ntfy URL told when a document fails
+
+	// AI fills in new documents (title, date, correspondent, type, path,
+	// tags, fields), picked the way Pocket Money picks it: automatic prefers
+	// Pocket AI through Core, else the person's own OpenAI key.
+	AIAuto        bool   `json:"ai_auto"`
+	AIProvider    string `json:"ai_provider"`
+	AIPocketModel string `json:"ai_pocket_model"`
+	AIURL         string `json:"ai_url"`
+	AIKey         string `json:"ai_key"`
+	AIModel       string `json:"ai_model"`
+	AIContext     string `json:"ai_context"` // extra words the model should know
 }

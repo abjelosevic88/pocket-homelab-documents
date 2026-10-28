@@ -98,6 +98,17 @@ export interface Settings {
   money_token_set: boolean
   money_account: number
   notify_url: string
+  /** AI fills in new documents; picked like Pocket Money: automatic prefers Pocket AI */
+  ai_auto: boolean
+  ai_provider: 'auto' | 'pocket' | 'openai'
+  ai_pocket_model: string
+  ai_status?: { provider: string; selected: string; ready: boolean; detail: string }
+  ai_configured: boolean
+  ai_url: string
+  ai_key_set: boolean
+  ai_model: string
+  ai_model_effective: string
+  ai_context: string
   core: boolean
   /** configured and registered: Core-only choices are greyed out otherwise */
   core_ready: boolean

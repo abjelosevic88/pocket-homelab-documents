@@ -350,6 +350,8 @@ func (s *Server) Router() http.Handler {
 			r.Get("/documents/{id}/pages/{n}/text", s.handlePageText)
 			r.Get("/documents/{id}/text", s.handleText)
 			r.Post("/documents/{id}/reprocess", s.handleReprocess)
+			r.Post("/documents/{id}/ai", s.handleAIFill)
+			r.Get("/ai/models", s.handleInferenceModels)
 			r.Get("/documents/{id}/suggestions", s.handleSuggestions)
 			r.Post("/documents/{id}/suggestions/apply", s.handleApplySuggestions)
 			r.Get("/documents/{id}/similar", s.handleSimilar)

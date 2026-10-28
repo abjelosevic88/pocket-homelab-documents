@@ -106,6 +106,7 @@ type processParams struct {
 	Mode         string `json:"mode"`
 	ForceText    bool   `json:"force_text"`
 	Actor        string `json:"actor"`
+	AITitle      bool   `json:"ai_title"` // the title was made of the file name; the AI may write a better one
 }
 
 func (s *Server) processJob(ctx context.Context, j *store.Job) error {
@@ -209,8 +210,24 @@ func (s *Server) processJob(ctx context.Context, j *store.Job) error {
 		}
 	}
 	if p.New && !p.SkipMatching {
+		before := *d
 		s.applyMatching(ctx, d, logf)
 		d, _ = s.store.GetDocumentAny(ctx, d.ID, true)
+		if st, _ := s.store.GetSettings(ctx, d.UserID); st.AIAuto && strings.TrimSpace(d.Content) != "" {
+			if client, _, _ := s.aiFor(ctx, d.UserID); client != nil {
+				s.store.JobProgress(ctx, j.ID, "AI is filling in the details", "")
+				res, err := s.aiFill(ctx, d, aiFillMode{Title: p.AITitle, Date: p.DetectDate, Before: &before}, "ai")
+				switch {
+				case err != nil:
+					logf("AI: %v", err)
+				case len(res.Applied) > 0:
+					logf("AI (%s): %s", res.Model, strings.Join(res.Applied, ", "))
+				default:
+					logf("AI (%s): nothing to change", res.Model)
+				}
+				d, _ = s.store.GetDocumentAny(ctx, d.ID, true)
+			}
+		}
 		s.runRules(ctx, d, "added", firstNonEmpty(p.Actor, "rules"))
 		d, _ = s.store.GetDocumentAny(ctx, d.ID, true)
 	}

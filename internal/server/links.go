@@ -27,11 +27,13 @@ var linkOffers = []core.Offer{
 }
 
 // linkUses: a document (an invoice, a receipt) can be booked as a transaction
-// in Pocket Money; the documents folder can live in Pocket Files.
+// in Pocket Money; the documents folder can live in Pocket Files; Pocket AI
+// fills in new documents.
 var linkUses = []core.Use{
 	{App: "money", Scopes: []string{"accounts:read", "transactions:write"}, Reason: "Book an invoice or receipt as a transaction in Pocket Money, with a link back to the document"},
 	{App: "review", Scopes: []string{"reviews:read", "reviews:write"}, Reason: "Send a document's PDF for review in Pocket Review, and show which documents are in review"},
 	{App: "files", Scopes: []string{"files:read", "files:write"}, Reason: "Keep a readable copy of your documents in Pocket Files and take new ones from its Inbox folder"},
+	core.InferenceUse(),
 }
 
 type linkRoute struct {

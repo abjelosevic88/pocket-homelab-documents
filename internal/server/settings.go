@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
+	"github.com/abjelosevic88/pocket-homelab-documents/internal/ai"
 	"github.com/abjelosevic88/pocket-homelab-documents/internal/ocr"
 	"github.com/abjelosevic88/pocket-homelab-documents/internal/store"
 )
@@ -20,6 +22,7 @@ func (s *Server) isAdmin(r *http.Request) bool {
 // publicSettings adds what the UI needs to know about the environment.
 func (s *Server) publicSettings(r *http.Request, st store.Settings) map[string]any {
 	tools := ocr.Detect(r.Context(), s.cfg.GotenbergURL)
+	_, aiStatus := s.inferenceFor(r.Context(), me(r), st.AIProvider, st.AIKey != "")
 	return map[string]any{
 		"title": st.Title, "setup_complete": st.SetupComplete,
 		"ocr_language": st.OCRLanguage, "ocr_mode": st.OCRMode, "ocr_deskew": st.OCRDeskew, "ocr_rotate": st.OCRRotate, "ocr_clean": st.OCRClean,
@@ -31,6 +34,8 @@ func (s *Server) publicSettings(r *http.Request, st store.Settings) map[string]a
 		"barcodes_enabled": st.BarcodesEnabled, "barcode_asn_prefix": st.BarcodeASNPrefix, "barcode_separator": st.BarcodeSeparator, "barcode_keep_separator": st.BarcodeKeepSep, "barcode_max_pages": st.BarcodeMaxPages,
 		"money_mode": st.MoneyMode, "money_url": st.MoneyURL, "money_token_set": st.MoneyToken != "", "money_account": st.MoneyAccount,
 		"notify_url":       st.NotifyURL,
+		"ai_auto":          st.AIAuto, "ai_provider": aiStatus.Provider, "ai_pocket_model": st.AIPocketModel, "ai_status": aiStatus, "ai_configured": aiStatus.Ready,
+		"ai_url": st.AIURL, "ai_key_set": st.AIKey != "", "ai_model": st.AIModel, "ai_model_effective": firstNonEmpty(st.AIModel, ai.DefaultModel), "ai_context": st.AIContext,
 		"core":             s.core.Configured(),
 		"core_ready":       s.coreReady(),
 		"tools":            tools,
@@ -58,6 +63,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		store.Settings
 		MoneyToken *string `json:"money_token"`
+		AIKey      *string `json:"ai_key"`
 	}
 	in.Settings = cur
 	if err := decode(r, &in); err != nil {
@@ -109,6 +115,21 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		st.MoneyToken = strings.TrimSpace(*in.MoneyToken)
 		if st.MoneyToken == "" {
 			_ = s.store.SetUserSetting(ctx, uid, "money_token", "")
+		}
+	}
+	if !core.ValidAIProvider(st.AIProvider) {
+		writeErr(w, http.StatusBadRequest, "choose automatic, Pocket AI or OpenAI")
+		return
+	}
+	if !core.ValidInferenceModel(st.AIPocketModel) {
+		writeErr(w, http.StatusBadRequest, "invalid Pocket AI model")
+		return
+	}
+	st.AIKey = ""
+	if in.AIKey != nil {
+		st.AIKey = strings.TrimSpace(*in.AIKey)
+		if st.AIKey == "" {
+			_ = s.store.SetUserSetting(ctx, uid, "ai_key", "")
 		}
 	}
 	if err := s.store.SaveSettings(ctx, uid, st); err != nil {

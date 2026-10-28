@@ -150,7 +150,7 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 			os.Remove(dst)
 		}
 	}()
-	params, err := json.Marshal(map[string]any{"new": true, "detect_date": in.Created == "" && st.DateFromText, "skip_matching": in.SkipMatching, "actor": firstNonEmpty(in.Actor, in.Source)})
+	params, err := json.Marshal(map[string]any{"new": true, "detect_date": in.Created == "" && st.DateFromText, "ai_title": strings.TrimSpace(in.Title) == "", "skip_matching": in.SkipMatching, "actor": firstNonEmpty(in.Actor, in.Source)})
 	if err != nil {
 		return nil, err
 	}

@@ -88,6 +88,14 @@ export default function DocumentPage() {
   }) // eslint-disable-line react-hooks/exhaustive-deps
 
   const create = (kind: 'tags' | 'correspondents' | 'document_types' | 'storage_paths') => async (name: string) => { const o = await api.post<{ id: number; name: string; color?: string }>(`${V1}/${kind}`, { name }); await reloadTax(); return o }
+  const fillAI = async () => {
+    toast('AI is reading the document…')
+    try {
+      const r = await api.post<{ applied: string[]; reason: string }>(`${V1}/documents/${doc!.id}/ai`, {})
+      toast(r.applied?.length ? `Filled in: ${r.applied.join(', ')}` : `Nothing to change${r.reason ? ` · ${r.reason}` : ''}`)
+      reloadTax(); await load(); bump()
+    } catch (e) { toast((e as Error).message, 'err') }
+  }
   const act = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); toast(msg); await load(); bump() } catch (e) { toast((e as Error).message, 'err') } }
   if (!doc || !form) return <Loading />
   const access = doc.access || 'owner'
@@ -138,6 +146,7 @@ export default function DocumentPage() {
           if (isOwner && users.length > 1) it.push({ label: 'Share with someone here…', icon: 'users', onSelect: () => setShareWith(true) })
           if (isOwner) it.push({ label: 'Replace the file…', icon: 'upload', onSelect: () => replaceInput.current?.click() })
           it.push({ label: 'Book in Pocket Money…', icon: 'wallet', onSelect: () => setMoneyOpen(true) })
+          if (isOwner && settings?.ai_configured && doc.status === 'done') it.push('sep', { label: dirty ? 'Fill in with AI (save first)' : 'Fill in with AI', icon: 'sparkles', disabled: !!dirty, onSelect: fillAI })
           it.push('sep', { heading: 'OCR' })
           if (isOwner) it.push({ label: 'Again with other languages…', icon: 'globe', onSelect: () => setLangOpen(true) })
           it.push({ label: 'Run OCR again', icon: 'refresh', onSelect: () => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, {}), 'Queued for OCR') })

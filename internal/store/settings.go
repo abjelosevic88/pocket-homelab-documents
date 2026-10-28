@@ -15,7 +15,7 @@ var EnvDefaults = Settings{
 	TrashDays: 30, ConsumeSubdirsAsTags: true, BarcodesEnabled: false, BarcodeASNPrefix: "ASN", BarcodeSeparator: "PATCHT", BarcodeMaxPages: 60, DateFromName: true,
 	FolderKind: "none", FolderName: "Documents", FolderFile: "archive", FolderInbox: true, FolderInboxName: "Inbox",
 	DateFormat: "iso", DefaultView: "table", PageSize: 50, DefaultSort: "-created", TitleFromName: true, DateFromText: true, SuggestOnOpen: true,
-	MoneyMode: "core",
+	MoneyMode: "core", AIAuto: true,
 }
 
 // GetSettings loads the box settings plus the preferences of userID, with
@@ -142,6 +142,20 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			st.MoneyAccount = n
 		case "notify_url":
 			st.NotifyURL = v
+		case "ai_auto":
+			st.AIAuto = v != "0"
+		case "ai_provider":
+			st.AIProvider = v
+		case "ai_pocket_model":
+			st.AIPocketModel = v
+		case "ai_url":
+			st.AIURL = v
+		case "ai_key":
+			st.AIKey = v
+		case "ai_model":
+			st.AIModel = v
+		case "ai_context":
+			st.AIContext = v
 		}
 	}
 	return st, rows.Err()
@@ -183,9 +197,14 @@ func (s *Store) SaveSettings(ctx context.Context, userID int64, st Settings) err
 		"title_from_name": b2s(st.TitleFromName), "date_from_text": b2s(st.DateFromText), "date_from_name": b2s(st.DateFromName), "suggest_on_open": b2s(st.SuggestOnOpen),
 		"money_mode": st.MoneyMode, "money_url": strings.TrimSpace(st.MoneyURL), "money_account": strconv.FormatInt(st.MoneyAccount, 10),
 		"notify_url": strings.TrimSpace(st.NotifyURL),
+		"ai_auto":    b2s(st.AIAuto), "ai_provider": st.AIProvider, "ai_pocket_model": st.AIPocketModel,
+		"ai_url": strings.TrimSpace(st.AIURL), "ai_model": strings.TrimSpace(st.AIModel), "ai_context": strings.TrimSpace(st.AIContext),
 	}
 	if st.MoneyToken != "" {
 		vals["money_token"] = st.MoneyToken
+	}
+	if st.AIKey != "" {
+		vals["ai_key"] = st.AIKey
 	}
 	for k, v := range map[string]string{"folder_kind": st.FolderKind, "folder_path": st.FolderPath, "folder_url": st.FolderURL, "folder_user": st.FolderUser, "folder_name": st.FolderName,
 		"folder_via_core": b2s(st.FolderViaCore), "folder_file": st.FolderFile, "folder_inbox": b2s(st.FolderInbox), "folder_inbox_name": st.FolderInboxName} {

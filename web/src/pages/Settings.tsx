@@ -11,13 +11,15 @@ import { Icon } from '../components/icons'
 import { ShortcutsSheet } from '../components/ShortcutsSheet'
 import MailSettings from './settings/Mail'
 import { Select } from '../components/Select'
+import { PocketModelSelect } from '../components/PocketModelSelect'
 
-type TabId = 'prefs' | 'profile' | 'ocr' | 'folder' | 'mail' | 'notifications' | 'integrations' | 'users' | 'api' | 'data' | 'about'
+type TabId = 'prefs' | 'profile' | 'ocr' | 'ai' | 'folder' | 'mail' | 'notifications' | 'integrations' | 'users' | 'api' | 'data' | 'about'
 
 const TABS: { id: TabId; label: string; icon: string; sub: string }[] = [
   { id: 'prefs', label: 'Preferences', icon: 'sliders', sub: 'Appearance, dates, how the documents list looks and what is read from new files.' },
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email and password.' },
   { id: 'ocr', label: 'OCR & scanning', icon: 'scan', sub: 'How scans are cleaned up and read, the languages, barcodes and the consume folder.' },
+  { id: 'ai', label: 'AI', icon: 'sparkles', sub: 'AI reads every new document and fills in its title, date, correspondent, type, path, tags and fields, the way you file.' },
   { id: 'folder', label: 'Documents folder', icon: 'folder', sub: 'A readable copy of your archive in Pocket Files, Nextcloud, WebDAV or a server folder, with an Inbox that feeds new files in.' },
   { id: 'mail', label: 'Mail', icon: 'mail', sub: 'Mailboxes checked over IMAP, and the rules that turn their attachments into documents.' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', sub: 'Where a message goes when a document cannot be processed or a rule says so.' },
@@ -81,6 +83,7 @@ export default function Settings() {
             {tab === 'prefs' && <Prefs />}
             {tab === 'profile' && <Profile />}
             {tab === 'ocr' && <OCR />}
+            {tab === 'ai' && <AI />}
             {tab === 'folder' && <Folder />}
             {tab === 'mail' && <MailSettings />}
             {tab === 'notifications' && <Notifications />}
@@ -167,6 +170,43 @@ function Prefs() {
       </Section>
       <Section title="Keyboard" sub={<>Press <kbd>?</kbd> anywhere for the list, <kbd>⌘K</kbd> or <kbd>/</kbd> to search.</>} actions={<button type="button" className="btn sm" onClick={() => setKeys(true)}><Icon name="keyboard" size={15} />Shortcuts</button>} />
       {keys && <ShortcutsSheet onClose={() => setKeys(false)} />}
+    </div>
+  )
+}
+
+// ---------- AI ----------
+
+function AI() {
+  const { f, setF, save, busy } = useSettingsForm()
+  const [key, setKey] = useState('')
+  if (!f) return <Loading />
+  // Pocket AI is reached through Pocket Core: without a Core it stays in the
+  // list, greyed out, and the hint below says why
+  const coreOn = f.core_ready
+  const provider = f.ai_provider || 'auto'
+  return (
+    <div className="stack loose">
+      <Section title="Fill in new documents" icon="sparkles" actions={<span className={`badge ${f.ai_configured ? 'ok' : 'warn'}`}>{f.ai_configured ? 'ready' : 'not set up'}</span>} sub="After OCR, the AI reads the text and sets the title, the date on the paper, the correspondent, type, storage path, tags and custom fields. It follows how you already file: your lists with how often you use each, and your recent documents as examples. What you chose while uploading stays; a new correspondent is created when nobody in your list fits.">
+        <SettingRow title="Fill in new documents with AI" help="Runs on every new document. On any document: More → Fill in with AI."><Switch label="Fill in new documents with AI" checked={f.ai_auto} onChange={v => setF({ ...f, ai_auto: v })} /></SettingRow>
+        <Field label="Words the AI should know" help='e.g. "Futrolica is my shop; receipts from it go to SP Futrolica"'><textarea value={f.ai_context} onChange={e => setF({ ...f, ai_context: e.target.value })} rows={2} /></Field>
+      </Section>
+      <Section title="AI provider" icon="layers" sub="The same choice as in Pocket Money. Pocket AI is preferred when connected through Core.">
+        <div className="stack">
+          <Field label="Text generation" help="Automatic prefers your enabled Pocket AI connection. Without one, it uses your saved OpenAI settings.">
+            <Segmented size="sm" label="Text generation provider" value={provider} onChange={v => setF({ ...f, ai_provider: v })} options={[{ value: 'auto', label: 'Automatic' }, { value: 'pocket', label: 'Pocket AI', disabled: !coreOn, title: coreOn ? undefined : 'Needs Pocket Core' }, { value: 'openai', label: 'OpenAI' }]} />
+          </Field>
+          <p className="muted small" role="status">Saved selection: {f.ai_status?.detail}. Pocket AI uses your connected Claude account.</p>
+          {!coreOn && <NeedsCore />}
+          {coreOn && provider !== 'openai' && <PocketModelSelect value={f.ai_pocket_model || ''} onChange={v => setF({ ...f, ai_pocket_model: v })} />}
+          {(provider === 'openai' || provider === 'auto') && <div className="stack">
+            {provider === 'auto' && <span className="muted small">Used when Pocket AI is not connected:</span>}
+            <Field label="OpenAI API key" help={f.ai_key_set ? 'A key is saved; enter a new one to replace it.' : undefined}><input type="password" value={key} onChange={e => setKey(e.target.value)} autoComplete="off" /></Field>
+            <Field label="Model" help={`Empty = ${f.ai_model_effective}`}><input value={f.ai_model} onChange={e => setF({ ...f, ai_model: e.target.value })} placeholder={f.ai_model_effective} spellCheck={false} /></Field>
+            <Field label="Base URL" help="Empty = api.openai.com"><input value={f.ai_url} onChange={e => setF({ ...f, ai_url: e.target.value })} placeholder="https://api.openai.com/v1" spellCheck={false} /></Field>
+          </div>}
+        </div>
+      </Section>
+      <div className="row"><button type="button" className="btn primary" onClick={() => { save(key ? { ai_key: key } : {}); setKey('') }} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></div>
     </div>
   )
 }
