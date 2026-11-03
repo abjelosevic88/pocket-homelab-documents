@@ -394,3 +394,12 @@ button.chip-tag { cursor: pointer; }
 .doc-form .tabs button { padding: 6px 9px; font-size: 13px; }
 [data-theme="dark"] .doc-card .sel { background: rgba(0, 0, 0, .55); }
 .sel-val { text-align: left; }
+
+/* what the AI made of a document (Details tab) */
+.ai-card { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); line-height: 1.5; font-size: 13px; }
+.ai-card > .icon { margin-top: 2px; color: var(--accent); flex: none; }
+.ai-card.muted { background: var(--surface-2); }
+.ai-card.muted > .icon { color: var(--muted); }
+.ai-card.danger { background: var(--danger-soft); color: var(--danger); }
+.ai-card.danger > .icon { color: var(--danger); }
+.ai-card .btn { flex: none; }

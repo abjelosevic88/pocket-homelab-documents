@@ -15,7 +15,7 @@ var EnvDefaults = Settings{
 	TrashDays: 30, ConsumeSubdirsAsTags: true, BarcodesEnabled: false, BarcodeASNPrefix: "ASN", BarcodeSeparator: "PATCHT", BarcodeMaxPages: 60, DateFromName: true,
 	FolderKind: "none", FolderName: "Documents", FolderFile: "archive", FolderInbox: true, FolderInboxName: "Inbox",
 	DateFormat: "iso", DefaultView: "table", PageSize: 50, DefaultSort: "-created", TitleFromName: true, DateFromText: true, SuggestOnOpen: true,
-	MoneyMode: "core", AIAuto: true,
+	MoneyMode: "core", AIAuto: true, AICreate: true,
 }
 
 // GetSettings loads the box settings plus the preferences of userID, with
@@ -156,6 +156,10 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			st.AIModel = v
 		case "ai_context":
 			st.AIContext = v
+		case "ai_create":
+			st.AICreate = v != "0"
+		case "ai_inbox":
+			st.AIInbox = v == "1"
 		}
 	}
 	return st, rows.Err()
@@ -199,6 +203,7 @@ func (s *Store) SaveSettings(ctx context.Context, userID int64, st Settings) err
 		"notify_url": strings.TrimSpace(st.NotifyURL),
 		"ai_auto":    b2s(st.AIAuto), "ai_provider": st.AIProvider, "ai_pocket_model": st.AIPocketModel,
 		"ai_url": strings.TrimSpace(st.AIURL), "ai_model": strings.TrimSpace(st.AIModel), "ai_context": strings.TrimSpace(st.AIContext),
+		"ai_create": b2s(st.AICreate), "ai_inbox": b2s(st.AIInbox),
 	}
 	if st.MoneyToken != "" {
 		vals["money_token"] = st.MoneyToken

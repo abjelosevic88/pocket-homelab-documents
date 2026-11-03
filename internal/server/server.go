@@ -57,6 +57,7 @@ type Server struct {
 	foldersMu   sync.Mutex
 	folders     map[int64]*docFolder
 	wake        chan struct{} // nudges the workers
+	aiWake      chan struct{} // nudges the AI's queue
 	workersOn   bool
 	processing  sync.Map // document id → job id while a worker has it
 }
@@ -75,6 +76,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 		classifiers: match.NewCache(),
 		folders:     map[int64]*docFolder{},
 		wake:        make(chan struct{}, 1),
+		aiWake:      make(chan struct{}, 1),
 	}
 	store.EnvDefaults.OCRLanguage = cfg.OCRLanguage
 	store.EnvDefaults.OCRMode = cfg.OCRMode
@@ -140,6 +142,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	go s.inboxLoop(ctx)
 	go s.mailLoop(ctx)
 	go s.janitor(ctx)
+	go s.aiLoop(ctx)
 	if s.core.Configured() {
 		go s.coreLoop(ctx)
 	}
@@ -350,7 +353,10 @@ func (s *Server) Router() http.Handler {
 			r.Get("/documents/{id}/pages/{n}/text", s.handlePageText)
 			r.Get("/documents/{id}/text", s.handleText)
 			r.Post("/documents/{id}/reprocess", s.handleReprocess)
+			r.Get("/documents/{id}/ai", s.handleGetDocAI)
 			r.Post("/documents/{id}/ai", s.handleAIFill)
+			r.Get("/ai/overview", s.handleAIOverview)
+			r.Post("/ai/backfill", s.handleAIBackfill)
 			r.Get("/ai/models", s.handleInferenceModels)
 			r.Get("/documents/{id}/suggestions", s.handleSuggestions)
 			r.Post("/documents/{id}/suggestions/apply", s.handleApplySuggestions)

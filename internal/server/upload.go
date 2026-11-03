@@ -105,6 +105,10 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 	}
 	st, _ := s.store.GetSettings(ctx, uid)
 	fromName := false
+	// the AI may still read the date off the paper when the uploader gave
+	// none, or only the scan's own (a scanner app sends today's date or puts
+	// it in the file name)
+	aiDate := in.Created == "" || in.Created == store.Today()
 	if in.Created == "" && st.DateFromName {
 		in.Created = dateFromName(in.Name)
 		fromName = in.Created != ""
@@ -150,7 +154,7 @@ func (s *Server) ingest(ctx contextT, uid int64, in incoming) (*store.Document, 
 			os.Remove(dst)
 		}
 	}()
-	params, err := json.Marshal(map[string]any{"new": true, "detect_date": in.Created == "" && st.DateFromText, "ai_title": strings.TrimSpace(in.Title) == "", "skip_matching": in.SkipMatching, "actor": firstNonEmpty(in.Actor, in.Source)})
+	params, err := json.Marshal(map[string]any{"new": true, "detect_date": in.Created == "" && st.DateFromText, "ai_title": strings.TrimSpace(in.Title) == "", "ai_date": aiDate, "skip_matching": in.SkipMatching, "actor": firstNonEmpty(in.Actor, in.Source)})
 	if err != nil {
 		return nil, err
 	}

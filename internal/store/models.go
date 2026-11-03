@@ -321,4 +321,6 @@ type Settings struct {
 	AIKey         string `json:"ai_key"`
 	AIModel       string `json:"ai_model"`
 	AIContext     string `json:"ai_context"` // extra words the model should know
+	AICreate      bool   `json:"ai_create"`  // it may add correspondents, types, tags and fields nobody made yet
+	AIInbox       bool   `json:"ai_inbox"`   // a document it filed leaves the Inbox
 }

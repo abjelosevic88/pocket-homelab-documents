@@ -54,6 +54,8 @@ export interface Facets { tags: Record<string, number>; correspondents: Record<s
 export interface ListResult { results: Document[]; count: number; facets: Facets | null; offset: number; limit: number }
 
 export interface Note { id: number; document_id: number; user_id: number; text: string; created_at: string }
+export interface DocAI { document_id: number; status: 'none' | 'pending' | 'done' | 'error' | 'skipped'; summary?: string; reason?: string; applied: string[]; model?: string; error?: string; attempts?: number; next_try_at?: string; updated_at?: string }
+export interface AICounts { done: number; pending: number; failed: number; skipped: number; never: number }
 export interface HistoryEntry { id: number; document_id: number; actor: string; action: string; changes: Record<string, unknown>; created_at: string }
 export interface Job { id: number; user_id: number; document_id: number | null; kind: string; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'; attempts: number; progress: string; log?: string; error: string; params: Record<string, unknown>; created_at: string; started_at: string | null; finished_at: string | null; document_title?: string }
 export interface SavedView { id: number; name: string; query: Record<string, unknown>; on_dashboard: boolean; in_sidebar: boolean; position: number; created_at: string }
@@ -109,6 +111,8 @@ export interface Settings {
   ai_model: string
   ai_model_effective: string
   ai_context: string
+  ai_create: boolean
+  ai_inbox: boolean
   core: boolean
   /** configured and registered: Core-only choices are greyed out otherwise */
   core_ready: boolean

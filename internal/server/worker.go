@@ -107,6 +107,7 @@ type processParams struct {
 	ForceText    bool   `json:"force_text"`
 	Actor        string `json:"actor"`
 	AITitle      bool   `json:"ai_title"` // the title was made of the file name; the AI may write a better one
+	AIDate       bool   `json:"ai_date"`  // no date was given, or only the scan's own; the AI may read the real one
 }
 
 func (s *Server) processJob(ctx context.Context, j *store.Job) error {
@@ -214,18 +215,23 @@ func (s *Server) processJob(ctx context.Context, j *store.Job) error {
 		s.applyMatching(ctx, d, logf)
 		d, _ = s.store.GetDocumentAny(ctx, d.ID, true)
 		if st, _ := s.store.GetSettings(ctx, d.UserID); st.AIAuto && strings.TrimSpace(d.Content) != "" {
-			if client, _, _ := s.aiFor(ctx, d.UserID); client != nil {
+			mode := aiFillMode{Title: p.AITitle, Date: p.DetectDate || p.AIDate}.keepSet(&before)
+			if client, _, detail := s.aiFor(ctx, d.UserID); client != nil {
 				s.store.JobProgress(ctx, j.ID, "AI is filling in the details", "")
-				res, err := s.aiFill(ctx, d, aiFillMode{Title: p.AITitle, Date: p.DetectDate, Before: &before}, "ai")
+				mode.InJob = true
+				res, err := s.runAI(ctx, d, mode, "ai", false)
 				switch {
 				case err != nil:
-					logf("AI: %v", err)
+					logf("AI: %v (tried again later)", err)
 				case len(res.Applied) > 0:
 					logf("AI (%s): %s", res.Model, strings.Join(res.Applied, ", "))
 				default:
 					logf("AI (%s): nothing to change", res.Model)
 				}
 				d, _ = s.store.GetDocumentAny(ctx, d.ID, true)
+			} else {
+				s.queueAI(ctx, d, mode, detail)
+				logf("AI not reachable (%s); the document waits for it", detail)
 			}
 		}
 		s.runRules(ctx, d, "added", firstNonEmpty(p.Actor, "rules"))

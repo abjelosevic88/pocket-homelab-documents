@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import type { APIToken, Settings as SettingsT, User, Job, FolderInfo, FolderKind, Language } from '../lib/types'
+import type { AICounts, APIToken, Settings as SettingsT, User, Job, FolderInfo, FolderKind, Language } from '../lib/types'
 import { ago, bytes, stamp } from '../lib/format'
 import { Confirm, CopyField, Field, Loading, Modal, NeedsCore, Segmented, SettingRow, Switch, Tabs, Toggle, useAsync, useIsMobile, useToast } from '../components/ui'
 import { Avatar } from '../components/people'
@@ -186,8 +186,10 @@ function AI() {
   const provider = f.ai_provider || 'auto'
   return (
     <div className="stack loose">
-      <Section title="Fill in new documents" icon="sparkles" actions={<span className={`badge ${f.ai_configured ? 'ok' : 'warn'}`}>{f.ai_configured ? 'ready' : 'not set up'}</span>} sub="After OCR, the AI reads the text and sets the title, the date on the paper, the correspondent, type, storage path, tags and custom fields. It follows how you already file: your lists with how often you use each, and your recent documents as examples. What you chose while uploading stays; a new correspondent is created when nobody in your list fits.">
+      <Section title="Fill in new documents" icon="sparkles" actions={<span className={`badge ${f.ai_configured ? 'ok' : 'warn'}`}>{f.ai_configured ? 'ready' : 'not set up'}</span>} sub="After OCR, the AI reads the text and names the document, sets the date on the paper, the correspondent, type, storage path and tags, records key facts (amount, numbers, due and expiry dates) as custom fields and writes a short summary. It follows how you already file: your lists with how often you use each, and your recent documents as examples. What you chose while uploading stays. When the AI is not reachable, the document waits and is read as soon as it is; a failed try is repeated later.">
         <SettingRow title="Fill in new documents with AI" help="Runs on every new document. On any document: More → Fill in with AI."><Switch label="Fill in new documents with AI" checked={f.ai_auto} onChange={v => setF({ ...f, ai_auto: v })} /></SettingRow>
+        <SettingRow title="Create what is missing" help="A new correspondent, type, up to 2 tags and custom fields (Amount, Invoice number, Valid until…) when nothing of yours fits. Off: it only picks from your lists."><Switch label="Create what is missing" checked={f.ai_create} onChange={v => setF({ ...f, ai_create: v })} /></SettingRow>
+        <SettingRow title="Take filed documents out of the Inbox" help="Once the AI has set a correspondent and a type. Off: they stay in the Inbox for you to look over."><Switch label="Take filed documents out of the Inbox" checked={f.ai_inbox} onChange={v => setF({ ...f, ai_inbox: v })} /></SettingRow>
         <Field label="Words the AI should know" help='e.g. "Futrolica is my shop; receipts from it go to SP Futrolica"'><textarea value={f.ai_context} onChange={e => setF({ ...f, ai_context: e.target.value })} rows={2} /></Field>
       </Section>
       <Section title="AI provider" icon="layers" sub="The same choice as in Pocket Money. Pocket AI is preferred when connected through Core.">
@@ -207,7 +209,37 @@ function AI() {
         </div>
       </Section>
       <div className="row"><button type="button" className="btn primary" onClick={() => { save(key ? { ai_key: key } : {}); setKey('') }} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></div>
+      <AIBackfill ready={!!f.ai_configured} />
     </div>
+  )
+}
+
+function AIBackfill({ ready }: { ready: boolean }) {
+  const { toast } = useToast()
+  const [c, setC] = useState<AICounts | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = () => api.get<AICounts>(`${V1}/ai/overview`).then(setC).catch(() => {})
+  useEffect(() => { load() }, [])
+  // while documents wait, look again now and then
+  useEffect(() => { if (!c?.pending) return; const t = setInterval(load, 8000); return () => clearInterval(t) }, [c?.pending])
+  const queue = async (retry: boolean) => {
+    setBusy(true)
+    try { const r = await api.post<{ queued: number; counts: AICounts }>(`${V1}/ai/backfill`, { retry_failed: retry }); setC(r.counts); toast(r.queued ? `${r.queued} queued for the AI` : 'Nothing to queue') } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) }
+  }
+  if (!c) return null
+  return (
+    <Section title="Your documents" icon="archive" sub="Documents that came in before the AI, or while it was off, have not been read. Reading them fills only what is empty: your own titles, dates, correspondents, types and paths stay; a title that is still a scanner's file name and a date that is only the day it was added may change.">
+      <div className="row wrap" style={{ gap: 8 }}>
+        <span className="badge ok">{c.done} read</span>
+        {c.pending > 0 && <span className="badge"><span className="spinner" style={{ width: 10, height: 10 }} /> {c.pending} waiting</span>}
+        {c.failed > 0 && <span className="badge danger">{c.failed} failed</span>}
+        <span className="badge">{c.never} not read yet</span>
+      </div>
+      <div className="row wrap mt">
+        <button type="button" className="btn primary sm" disabled={!ready || busy || c.never === 0} onClick={() => queue(false)}><Icon name="sparkles" size={15} />{c.never ? `Read ${c.never} document${c.never === 1 ? '' : 's'}` : 'All documents read'}</button>
+        {c.failed > 0 && <button type="button" className="btn sm" disabled={!ready || busy} onClick={() => queue(true)}><Icon name="refresh" size={15} />Try the failed ones again</button>}
+      </div>
+    </Section>
   )
 }
 

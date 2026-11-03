@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { FIELD_TYPES } from '../lib/types'
-import type { Document, HistoryEntry, Job, Note, Share, Suggestions, CustomField, FieldValue, Version, DocShare } from '../lib/types'
+import type { DocAI, Document, HistoryEntry, Job, Note, Share, Suggestions, CustomField, FieldValue, Version, DocShare } from '../lib/types'
 import { ago, bytes, fileIconName, fmtDate, money, plural, stamp } from '../lib/format'
 import { Card, Confirm, Field, Loading, type MenuItem, MenuButton, Modal, Segmented, Tabs, Toggle, download, modalOpen, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
@@ -88,13 +88,14 @@ export default function DocumentPage() {
   }) // eslint-disable-line react-hooks/exhaustive-deps
 
   const create = (kind: 'tags' | 'correspondents' | 'document_types' | 'storage_paths') => async (name: string) => { const o = await api.post<{ id: number; name: string; color?: string }>(`${V1}/${kind}`, { name }); await reloadTax(); return o }
-  const fillAI = async () => {
+  const [aiNonce, setAINonce] = useState(0)
+  const fillAI = async (fill = false) => {
     toast('AI is reading the document…')
     try {
-      const r = await api.post<{ applied: string[]; reason: string }>(`${V1}/documents/${doc!.id}/ai`, {})
+      const r = await api.post<{ applied: string[]; reason: string }>(`${V1}/documents/${doc!.id}/ai`, { fill })
       toast(r.applied?.length ? `Filled in: ${r.applied.join(', ')}` : `Nothing to change${r.reason ? ` · ${r.reason}` : ''}`)
       reloadTax(); await load(); bump()
-    } catch (e) { toast((e as Error).message, 'err') }
+    } catch (e) { toast((e as Error).message, 'err') } finally { setAINonce(n => n + 1) }
   }
   const act = async (fn: () => Promise<unknown>, msg: string) => { try { await fn(); toast(msg); await load(); bump() } catch (e) { toast((e as Error).message, 'err') } }
   if (!doc || !form) return <Loading />
@@ -146,7 +147,7 @@ export default function DocumentPage() {
           if (isOwner && users.length > 1) it.push({ label: 'Share with someone here…', icon: 'users', onSelect: () => setShareWith(true) })
           if (isOwner) it.push({ label: 'Replace the file…', icon: 'upload', onSelect: () => replaceInput.current?.click() })
           it.push({ label: 'Book in Pocket Money…', icon: 'wallet', onSelect: () => setMoneyOpen(true) })
-          if (isOwner && settings?.ai_configured && doc.status === 'done') it.push('sep', { label: dirty ? 'Fill in with AI (save first)' : 'Fill in with AI', icon: 'sparkles', disabled: !!dirty, onSelect: fillAI })
+          if (isOwner && settings?.ai_configured && doc.status === 'done') it.push('sep', { label: dirty ? 'Fill in with AI (save first)' : 'Fill in with AI', icon: 'sparkles', disabled: !!dirty, onSelect: () => fillAI() })
           it.push('sep', { heading: 'OCR' })
           if (isOwner) it.push({ label: 'Again with other languages…', icon: 'globe', onSelect: () => setLangOpen(true) })
           it.push({ label: 'Run OCR again', icon: 'refresh', onSelect: () => act(() => api.post(`${V1}/documents/${doc.id}/reprocess`, {}), 'Queued for OCR') })
@@ -187,6 +188,7 @@ export default function DocumentPage() {
               </tbody></table>
             </div>}
             {tab === 'details' && isOwner && <div className="grid" style={{ gap: 12 }}>
+              <AICard doc={doc} nonce={aiNonce} ready={!!settings?.ai_configured} busy={!!dirty} onRead={fillAI} />
               <div className="two-col tight">
                 <Field label="Document date"><input type="date" value={form.created || ''} onChange={e => setForm({ ...form, created: e.target.value })} /></Field>
                 <Field label="Archive serial number" help="Write it on the paper; find it later with asn:12"><div className="row"><input value={form.asn ?? ''} onChange={e => setForm({ ...form, asn: e.target.value === '' ? null : Number(e.target.value) })} inputMode="numeric" placeholder="none" /><button type="button" className="btn sm" title="Next free number" onClick={() => api.get<{ next_asn: number }>(`${V1}/documents/next_asn`).then(r => setForm(f => ({ ...f, asn: r.next_asn })))}>next</button></div></Field>
@@ -246,6 +248,29 @@ export default function DocumentPage() {
       {splitOpen && <Modal title={`Split ${selPages.length} page${selPages.length > 1 ? 's' : ''} off`} onClose={() => setSplitOpen(false)}>
         <SplitForm doc={doc} pages={selPages} onClose={() => setSplitOpen(false)} onDone={nd => { setSplitOpen(false); setSelPages([]); toast('New document made'); navigate(`/documents/${nd.id}`) }} />
       </Modal>}
+    </div>
+  )
+}
+
+// AICard: what the AI made of the document (its summary and what it set),
+// or that it is still waiting, failed or never read it.
+function AICard({ doc, nonce, ready, busy, onRead }: { doc: Document; nonce: number; ready: boolean; busy: boolean; onRead: (fill: boolean) => void }) {
+  const [a, setA] = useState<DocAI | null>(null)
+  useEffect(() => { api.get<DocAI>(`${V1}/documents/${doc.id}/ai`).then(setA).catch(() => setA(null)) }, [doc.id, doc.modified_at, nonce])
+  if (!a || doc.status !== 'done' || (a.status === 'none' && !ready)) return null
+  const read = (fill: boolean, label: string, title?: string) => ready && <button type="button" className="btn ghost xs" disabled={busy} title={busy ? 'Save first' : title} onClick={() => onRead(fill)}><Icon name="sparkles" size={13} />{label}</button>
+  if (a.status === 'none') return <div className="ai-card muted small"><Icon name="sparkles" size={15} /><span className="grow">The AI has not read this document.</span>{read(true, 'Read it', 'Fills only what is empty')}</div>
+  if (a.status === 'skipped') return <div className="ai-card muted small"><Icon name="sparkles" size={15} /><span className="grow">The AI had no text to read.</span></div>
+  if (a.status === 'pending') return <div className="ai-card small"><span className="spinner" /><span className="grow">Waiting for the AI{a.error ? <span className="muted"> · {a.error}</span> : null}</span>{read(true, 'Read now')}</div>
+  if (a.status === 'error') return <div className="ai-card danger small"><Icon name="alert" size={15} /><span className="grow"><b>The AI failed:</b> {a.error}{a.next_try_at ? <span className="muted"> · tries again {stamp(a.next_try_at)}</span> : null}</span>{read(true, 'Try now')}</div>
+  return (
+    <div className="ai-card">
+      <Icon name="sparkles" size={15} />
+      <div className="grow stack" style={{ gap: 4 }}>
+        {a.summary ? <span>{a.summary}</span> : a.reason ? <span>{a.reason}</span> : null}
+        <span className="muted small">{a.applied.length ? <>Set: {a.applied.join(' · ')}</> : 'Nothing needed changing'} · <span title={stamp(a.updated_at || '')}>{ago(a.updated_at || '')}</span>{a.model ? <> · {a.model}</> : null}</span>
+      </div>
+      {read(false, 'Read again', 'What it finds replaces what is set')}
     </div>
   )
 }
