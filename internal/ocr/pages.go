@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/jpeg"
 	"image/png"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/abjelosevic88/pocket-homelab-documents/internal/extract"
 )
 
 // Page tools on PDFs through qpdf, and on images in Go.
@@ -209,4 +212,68 @@ func ReadBarcodes(ctx context.Context, tools *Tools, src, tmpDir string, maxPage
 		}
 	}
 	return out, nil
+}
+
+// ToPDF turns one file into a PDF so it can be joined onto another: PDFs as
+// they are, images through img2pdf, office files and text through Gotenberg.
+func ToPDF(ctx context.Context, gotenberg, src, out string) error {
+	switch extract.Kind(filepath.Ext(src)) {
+	case "pdf":
+		return copyFile(src, out)
+	case "image":
+		if err := img2pdf(ctx, src, out); err == nil {
+			return nil
+		}
+		// img2pdf refuses some images (alpha channels, odd formats): flatten to JPEG first
+		flat := strings.TrimSuffix(out, filepath.Ext(out)) + "-flat.jpg"
+		defer os.Remove(flat)
+		if err := flattenJPEG(src, flat); err != nil {
+			return fmt.Errorf("could not read the image: %v", err)
+		}
+		return img2pdf(ctx, flat, out)
+	case "office":
+		if gotenberg == "" {
+			return errors.New("office files need Gotenberg to become pages")
+		}
+		return gotenbergConvert(ctx, gotenberg, src, out)
+	case "text":
+		if gotenberg == "" || !isHTMLish(src) {
+			return errors.New("this file cannot be turned into pages")
+		}
+		return gotenbergHTML(ctx, gotenberg, src, out)
+	}
+	return fmt.Errorf("unsupported file type %q", filepath.Ext(src))
+}
+
+func img2pdf(ctx context.Context, src, out string) error {
+	cmd := exec.CommandContext(ctx, "img2pdf", "--output", out, src)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("img2pdf: %v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
+// flattenJPEG re-encodes an image as JPEG on a white background.
+func flattenJPEG(src, out string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	img, _, err := image.Decode(f)
+	f.Close()
+	if err != nil {
+		return err
+	}
+	b := img.Bounds()
+	dst := image.NewRGBA(b)
+	draw.Draw(dst, b, image.White, image.Point{}, draw.Src)
+	draw.Draw(dst, b, img, b.Min, draw.Over)
+	o, err := os.Create(out)
+	if err != nil {
+		return err
+	}
+	defer o.Close()
+	return jpeg.Encode(o, dst, &jpeg.Options{Quality: 90})
 }

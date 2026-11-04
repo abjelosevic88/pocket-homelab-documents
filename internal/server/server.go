@@ -373,6 +373,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/collab/lookup", s.handleCollabLookup)
 			r.Post("/documents/{id}/pages", s.handlePages)
 			r.Post("/documents/{id}/replace", s.handleReplaceFile)
+			r.Post("/documents/{id}/append", s.handleAppendFiles)
 			r.Get("/documents/{id}/versions", s.handleListVersions)
 			r.Get("/documents/{id}/versions/{n}/download", s.handleDownloadVersion)
 			r.Post("/documents/{id}/versions/{n}/restore", s.handleRestoreVersion)

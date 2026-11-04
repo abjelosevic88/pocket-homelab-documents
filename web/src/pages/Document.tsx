@@ -34,6 +34,7 @@ export default function DocumentPage() {
   const [selPages, setSelPages] = useState<number[]>([])
   const [splitOpen, setSplitOpen] = useState(false)
   const replaceInput = useRef<HTMLInputElement>(null)
+  const appendInput = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<'pages' | 'pdf'>(() => (localStorage.getItem('pd-preview') as 'pages' | 'pdf') || (window.innerWidth < 900 ? 'pages' : 'pdf'))
   const [saving, setSaving] = useState(false)
   const [similar, setSimilar] = useState<Document[] | null>(null)
@@ -113,6 +114,14 @@ export default function DocumentPage() {
     if (!res.ok) { toast(j.error || res.statusText, 'err'); return }
     toast('File replaced; OCR running'); await load(); bump()
   }
+  const append = async (files: File[]) => {
+    const fd = new FormData(); files.forEach(f => fd.append('document', f))
+    toast(files.length > 1 ? `Adding ${files.length} files…` : `Adding ${files[0].name}…`)
+    const res = await fetch(`${V1}/documents/${doc.id}/append`, { method: 'POST', body: fd, credentials: 'same-origin' })
+    const j = await res.json().catch(() => ({}))
+    if (!res.ok) { toast(j.error || res.statusText, 'err'); return }
+    toast('Pages added at the end; OCR running'); await load(); bump()
+  }
   const hasPDFSource = doc.has_archive || doc.mime === 'application/pdf'
   const toggleSel = (n: number) => setSelPages(p => p.includes(n) ? p.filter(x => x !== n) : [...p, n].sort((a, b) => a - b))
   const hasPDF = doc.has_archive || doc.mime === 'application/pdf'
@@ -145,6 +154,7 @@ export default function DocumentPage() {
           it.push({ label: 'Open in a new tab', icon: 'external', onSelect: () => { window.open(`${V1}/documents/${doc.id}/preview`, '_blank', 'noopener') } })
           if (isOwner) it.push('sep', { label: 'Share link…', icon: 'link', onSelect: () => setShare(true) })
           if (isOwner && users.length > 1) it.push({ label: 'Share with someone here…', icon: 'users', onSelect: () => setShareWith(true) })
+          if (isOwner) it.push({ label: 'Add files to the end…', icon: 'plus', disabled: !hasPDFSource || doc.status === 'processing', onSelect: () => appendInput.current?.click() })
           if (isOwner) it.push({ label: 'Replace the file…', icon: 'upload', onSelect: () => replaceInput.current?.click() })
           it.push({ label: 'Book in Pocket Money…', icon: 'wallet', onSelect: () => setMoneyOpen(true) })
           if (isOwner && settings?.ai_configured && doc.status === 'done') it.push('sep', { label: dirty ? 'Fill in with AI (save first)' : 'Fill in with AI', icon: 'sparkles', disabled: !!dirty, onSelect: () => fillAI() })
@@ -158,6 +168,7 @@ export default function DocumentPage() {
         }}>More<Icon name="chevron-down" size={14} /></MenuButton>
         <button type="button" className="btn primary sm" disabled={!dirty || saving || !canEdit} onClick={save} title="⌘S">{saving ? 'Saving…' : 'Save'}</button>
         <input ref={replaceInput} type="file" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.docx,.xlsx,.pptx,.odt,.txt,.md,.html,.eml" onChange={e => { if (e.target.files?.[0]) replace(e.target.files[0]); e.target.value = '' }} />
+        <input ref={appendInput} type="file" hidden multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp,.docx,.xlsx,.pptx,.odt,.txt,.md,.html" onChange={e => { const fs = Array.from(e.target.files || []); if (fs.length) append(fs); e.target.value = '' }} />
       </div>
       {!isOwner && <div className="shared-banner"><Icon name="share" size={15} />Shared with you by <b>{doc.owner_name}</b> · {access === 'edit' ? 'you can change its details and add notes' : 'view only'}</div>}
       {doc.status === 'failed' && <div className="callout danger mb"><Icon name="alert" size={15} /><span><b>OCR failed:</b> {doc.status_message} <button type="button" className="link-btn" onClick={() => navigate('/jobs')}>See the log</button></span></div>}

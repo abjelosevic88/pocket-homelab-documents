@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -337,6 +338,99 @@ func (s *Server) handleReplaceFile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, nd)
 		return
 	}
+}
+
+// handleAppendFiles adds the pages of one or more files (multipart "document",
+// repeatable) to the end of a document. The old file is kept as a version.
+func (s *Server) handleAppendFiles(w http.ResponseWriter, r *http.Request) {
+	ctx, uid := r.Context(), me(r)
+	d, err := s.store.GetDocument(ctx, uid, idParam(r, "id"), false)
+	if err != nil {
+		s.fail(w, err, "document")
+		return
+	}
+	if _, busy := s.processing.Load(d.ID); busy || d.Status == "processing" {
+		writeErr(w, http.StatusConflict, "OCR is still running on this document; try again in a moment")
+		return
+	}
+	if !ocr.Detect(ctx, s.cfg.GotenbergURL).QPDF {
+		writeErr(w, http.StatusBadRequest, "qpdf is not installed")
+		return
+	}
+	base, err := s.pdfOf(d)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	mr, err := r.MultipartReader()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "send multipart/form-data with \"document\" fields")
+		return
+	}
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	stamp := time.Now().UnixNano()
+	var tmps, pdfs, names []string
+	defer func() {
+		for _, p := range tmps {
+			os.Remove(p)
+		}
+	}()
+	pdfs = append(pdfs, base)
+	for i := 0; ; i++ {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "the upload was cut off: "+err.Error())
+			return
+		}
+		if part.FileName() == "" {
+			continue
+		}
+		name := filepath.Base(part.FileName())
+		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
+		if extract.Kind(ext) == "" {
+			writeErr(w, http.StatusBadRequest, fmt.Sprintf("“%s”: files of type .%s are not supported", name, ext))
+			return
+		}
+		up, _, _, err := s.saveUpload(part, firstNonEmpty(ext, "bin"))
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, fmt.Sprintf("“%s”: %v", name, err))
+			return
+		}
+		tmps = append(tmps, up)
+		out := filepath.Join(s.cfg.TmpDir, fmt.Sprintf("append-%d-%d-%d.pdf", d.ID, stamp, i))
+		tmps = append(tmps, out)
+		if err := ocr.ToPDF(cctx, s.cfg.GotenbergURL, up, out); err != nil {
+			writeErr(w, http.StatusBadRequest, fmt.Sprintf("“%s”: %v", name, err))
+			return
+		}
+		pdfs = append(pdfs, out)
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		writeErr(w, http.StatusBadRequest, "no file in the request")
+		return
+	}
+	joined := filepath.Join(s.cfg.TmpDir, fmt.Sprintf("append-%d-%d.pdf", d.ID, stamp))
+	if err := ocr.MergePDFs(cctx, joined, pdfs...); err != nil {
+		os.Remove(joined)
+		s.fail(w, err, "add pages")
+		return
+	}
+	name := d.OriginalName
+	if !strings.EqualFold(d.OriginalExt, "pdf") {
+		name = strings.TrimSuffix(d.OriginalName, filepath.Ext(d.OriginalName)) + ".pdf"
+	}
+	if err := s.swapFile(ctx, d, joined, name, actorName(r), "pages added from "+strings.Join(names, ", ")); err != nil {
+		os.Remove(joined)
+		s.fail(w, err, "add pages")
+		return
+	}
+	nd, _ := s.store.GetDocument(ctx, uid, d.ID, false)
+	writeJSON(w, http.StatusOK, nd)
 }
 
 func (s *Server) handleListVersions(w http.ResponseWriter, r *http.Request) {
