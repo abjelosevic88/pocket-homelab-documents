@@ -146,12 +146,12 @@ export default function DocumentPage() {
         <span className="spacer" />
         {doc.status !== 'done' && <span className={`badge st-${doc.status}`}>{doc.status === 'failed' ? 'OCR failed' : doc.status === 'processing' ? 'OCR running…' : 'waiting for OCR'}</span>}
         <button type="button" className={`btn icon-only sm ${form.favorite ? 'on' : ''}`} onClick={() => setForm({ ...form, favorite: !form.favorite })} title={form.favorite ? 'Favourite (click to unmark)' : 'Mark as favourite'} aria-label="Favourite" aria-pressed={!!form.favorite}><span className={form.favorite ? 'star' : ''} style={{ margin: 0 }}><Icon name="star" size={15} /></span></button>
-        <a className="btn sm" href={`${V1}/documents/${doc.id}/download`}><Icon name="download" size={15} />{doc.has_archive ? 'PDF' : 'Download'}</a>
+        <a className="btn sm" href={`${V1}/documents/${doc.id}/download?v=${encodeURIComponent(doc.modified_at)}`}><Icon name="download" size={15} />{doc.has_archive ? 'PDF' : 'Download'}</a>
         {isOwner && <ReviewAction doc={doc} />}
         <MenuButton label="More actions" className="btn sm" align="right" width={280} items={() => {
           const it: MenuItem[] = []
-          if (doc.has_archive) it.push({ label: `Download original (${doc.original_name.split('.').pop()?.toUpperCase()})`, icon: 'download', onSelect: () => download(`${V1}/documents/${doc.id}/download?original=1`) })
-          it.push({ label: 'Open in a new tab', icon: 'external', onSelect: () => { window.open(`${V1}/documents/${doc.id}/preview`, '_blank', 'noopener') } })
+          if (doc.has_archive) it.push({ label: `Download original (${doc.original_name.split('.').pop()?.toUpperCase()})`, icon: 'download', onSelect: () => download(`${V1}/documents/${doc.id}/download?original=1&v=${encodeURIComponent(doc.modified_at)}`) })
+          it.push({ label: 'Open in a new tab', icon: 'external', onSelect: () => { window.open(`${V1}/documents/${doc.id}/preview?v=${encodeURIComponent(doc.modified_at)}`, '_blank', 'noopener') } })
           if (isOwner) it.push('sep', { label: 'Share link…', icon: 'link', onSelect: () => setShare(true) })
           if (isOwner && users.length > 1) it.push({ label: 'Share with someone here…', icon: 'users', onSelect: () => setShareWith(true) })
           if (isOwner) it.push({ label: 'Add files to the end…', icon: 'plus', disabled: !hasPDFSource || doc.status === 'processing', onSelect: () => appendInput.current?.click() })
@@ -245,9 +245,9 @@ export default function DocumentPage() {
               <button type="button" className="btn ghost xs" onClick={() => setSelPages([])}>Clear</button>
             </>}
           </div>}
-          {hasPDF && preview === 'pdf' && <iframe className="pdf-frame" src={`${V1}/documents/${doc.id}/preview#view=FitH`} title="PDF" />}
+          {hasPDF && preview === 'pdf' && <iframe className="pdf-frame" src={`${V1}/documents/${doc.id}/preview?v=${encodeURIComponent(doc.modified_at)}#view=FitH`} title="PDF" />}
           {hasPDF && preview === 'pages' && <PageImages doc={doc} selected={selPages} onToggle={isOwner ? toggleSel : undefined} />}
-          {!hasPDF && isImage && <div className="image-preview"><img src={`${V1}/documents/${doc.id}/preview`} alt="" /></div>}
+          {!hasPDF && isImage && <div className="image-preview"><img src={`${V1}/documents/${doc.id}/preview?v=${encodeURIComponent(doc.modified_at)}`} alt="" /></div>}
           {!hasPDF && !isImage && <div className="text-preview"><div className="muted small mb row"><Icon name={fileIconName(doc.mime, doc.original_name)} size={15} />{doc.original_name} — no PDF twin (set GOTENBERG_URL to render office files); the text:</div><pre>{doc.content || 'No text.'}</pre></div>}
         </div>
       </div>
