@@ -16,7 +16,7 @@
 
 Paperless-ngx is the right idea: scan everything, OCR it, tag it, find it again. It is also a Django app with Celery, Redis, PostgreSQL and a Python toolchain, and it keeps every person's papers in one pile with a permissions layer on top. Pocket Documents keeps the idea and drops the rest: a Go binary, one SQLite file, OCRmyPDF and Poppler in the same container, and every person's archive strictly their own.
 
-- **OCR you can trust.** Every PDF, scan and photo becomes a PDF/A with a text layer (OCRmyPDF + Tesseract, any languages), kept next to the untouched original. Skip pages that already have text, redo bad text layers, or force a full re-OCR per document. Office files, HTML, Markdown and e-mails are read natively; with a Gotenberg container they get a PDF twin too.
+- **OCR you can trust.** Every PDF, scan and photo becomes a PDF/A with a text layer (OCRmyPDF + Tesseract, any languages), kept next to the untouched original. Skip pages that already have text, redo bad text layers, or force a full re-OCR per document. Office files, HTML, Markdown and e-mails are read natively, and get a PDF twin too through the Gotenberg container that comes with the sample compose file.
 - **Search that understands the paper.** SQLite FTS5 with BM25 ranking over the text, title, notes, tags and names, with highlighted passages; word beginnings match, and substrings are tried when nothing else does (`nvoic` finds invoices). One box takes it all: `ikea tag:receipts created:2024 -tag:paid "amount due"`. Facet counts next to every filter; sort by anything; save a search as a view for the sidebar and dashboard.
 - **Filing that learns.** Tags, correspondents, document types and storage paths are assigned by matching rules (any / all words, phrase, regex, fuzzy) or by a classifier trained on how you filed the last ones, shown as suggestions with a confidence and applied in one tap. Rules add the rest: *file name like `*ikea*` → correspondent IKEA, tag Receipts, title `IKEA {created}`*. The document's date is read off the paper.
 - **AI fills it in.** After OCR, Pocket AI (through Pocket Core, or your own OpenAI key) reads the text and names the document, sets the date on the paper, correspondent, type, storage path and tags, records key facts (amount, invoice/policy numbers, due and expiry dates) as custom fields and writes a short summary, the way you already file: it sees your lists with how often each is used and your recent documents as examples. When nothing fits it can create a correspondent, type, tags or fields (Settings → AI). What you chose while uploading stays. Every document keeps an AI record: one that arrives while no AI is reachable waits for it, a failed try is repeated later, and older documents can be read in one go (Settings → AI → Your documents), filling only what is empty. *More → Fill in with AI* runs it again on any document.
@@ -98,7 +98,10 @@ docker compose up -d
 # open http://localhost:8080 and create your account
 ```
 
-Or with plain Docker:
+That starts the app and [Gotenberg](https://gotenberg.dev), which gives office files a PDF twin. Gotenberg has no
+port of its own. With Pocket Core, **Apps → Install app → Pocket Documents** does the same.
+
+Or with plain Docker (no PDF twins for office files unless you set `GOTENBERG_URL`):
 
 ```bash
 docker run -d --name pocket-documents -p 8080:8080 -v ./data:/data -e TZ=Europe/Berlin -e OCR_LANGUAGE=eng+deu \
@@ -129,7 +132,7 @@ Everything is an environment variable with a sensible default. The ones that mat
 | `OCR_LANGUAGE` | `eng` | Tesseract codes joined with `+`. Changeable in Settings. |
 | `OCR_MODE` | `skip` | `skip` / `redo` / `force`; see [docs/configuration.md](docs/configuration.md). |
 | `OCR_WORKERS` | `1` | Documents processed at once. |
-| `GOTENBERG_URL` | – | Office documents get a PDF twin through [Gotenberg](https://gotenberg.dev). |
+| `GOTENBERG_URL` | – | Office documents get a PDF twin through [Gotenberg](https://gotenberg.dev) (the sample compose file brings one and sets this). |
 | `CONSUME_DIR` / `MIRROR_DIR` | `DATA_DIR/consume`, `DATA_DIR/mirror` | The watched folder; the browsable copy. |
 | `AUTH_MODE` | `local` | `local` (login, multi-user), `proxy` (trust your SSO proxy's header), `none` (no login, trusted LAN). |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | – | Create the first admin without the setup screen. |

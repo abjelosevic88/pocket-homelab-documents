@@ -1,3 +1,8 @@
+# Pocket Documents — documents, OCR and full-text search. Go + SQLite.
+# `docker compose up -d` starts the app and Gotenberg, which gives office documents, HTML,
+# Markdown and text a PDF twin. Gotenberg has no port of its own: only the app reaches it.
+# Don't want it? Delete the gotenberg service and GOTENBERG_URL (saves ~700 MB): their text
+# is still read natively. Already run one? Point GOTENBERG_URL at it instead.
 services:
   pocket-documents:
     image: ghcr.io/abjelosevic88/pocket-homelab-documents:latest
@@ -11,7 +16,7 @@ services:
       OCR_LANGUAGE: ${OCR_LANGUAGE:-eng}   # tesseract codes joined with +, e.g. eng+deu
       # OCR_WORKERS: "2"                    # documents processed at once (each may use OCR_THREADS cores)
       # OCR_MODE: skip                      # skip | redo | force
-      # GOTENBERG_URL: http://gotenberg:3000  # office documents get a PDF twin
+      GOTENBERG_URL: ${GOTENBERG_URL:-http://gotenberg:3000}   # office documents get a PDF twin (the service below)
       # MIRROR_DIR: /mirror                 # a browsable copy by storage path (switch on in Settings)
       # Set both to skip the first-run setup screen and create the admin directly:
       # ADMIN_EMAIL: ${ADMIN_EMAIL}
@@ -23,3 +28,14 @@ services:
       - ./data:/data
       # - ./consume:/data/consume           # drop files here (a scanner share, Syncthing…)
     # mem_limit: 2g                         # OCR of big scans is memory hungry
+    depends_on:
+      gotenberg:
+        condition: service_started
+        required: false   # works without it
+
+  # Gotenberg, the official image: converts office files, HTML and Markdown to PDF.
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: pocket-documents-gotenberg
+    restart: unless-stopped
+    command: ["gotenberg", "--chromium-disable-javascript=true", "--api-timeout=120s"]

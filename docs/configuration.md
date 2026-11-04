@@ -38,7 +38,7 @@ Everything is an environment variable; every one has a default, so `docker run` 
 | `OCR_OUTPUT_TYPE` | `pdfa` | `pdfa` or `pdf`. |
 | `OCR_IMAGE_DPI` | `300` | Assumed for photos and images without a DPI. |
 | `DATA_DIR/tessdata` | – | Language packs installed from Settings → OCR → Languages land here (tessdata_best models); the image's own packs are linked in and `TESSDATA_PREFIX` points Tesseract at it. The image ships `srp` and `srp_latn` from tessdata_best. |
-| `GOTENBERG_URL` | – | With a [Gotenberg](https://gotenberg.dev) container, office documents, HTML, Markdown and text get a PDF twin too. Without it their text is still read natively. |
+| `GOTENBERG_URL` | – (`http://gotenberg:3000` in the sample compose file, which brings Gotenberg along) | With a [Gotenberg](https://gotenberg.dev) container, office documents, HTML, Markdown and text get a PDF twin too. Without it their text is still read natively. |
 | `CONSUME_POLL` | `10s` | How often the consume folder is looked at. A file is taken once its size is stable for two polls. |
 | `CONSUME_DELETE` | `true` | Remove the file from the consume folder once it is in (`false` copies it; the duplicate check keeps it from coming in twice). |
 
