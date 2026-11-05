@@ -136,7 +136,7 @@ func TestAIQueueCreatesAndBackfills(t *testing.T) {
 		ans, _ := json.Marshal(map[string]any{"title": "Ugovor o zalozi Athena 28.09.2026", "created": "2026-09-28", "new_correspondent": "Athena Studio",
 			"new_document_type": "Ugovori", "new_tags": []string{"posao", "x", "y"}, "tag_ids": []int64{},
 			"new_fields": []map[string]any{{"name": "Amount", "type": "monetary", "value": "1.500,00 EUR"}, {"name": "Contract number", "type": "string", "value": "Z-12"}, {"name": "Bad", "type": "documentlink", "value": "1"}},
-			"summary": "A share pledge agreement. Signed 28 September 2026.", "reason": "contract"})
+			"summary":    "A share pledge agreement. Signed 28 September 2026.", "reason": "contract"})
 		return string(ans)
 	})
 
