@@ -66,6 +66,8 @@ Matching algorithms: `0` none, `1` any word, `2` all words, `3` exact phrase, `4
 
 `GET /dashboard` (Homepage widget: `documents`, `inbox`, `untagged`, `pending`, `failed`, `added_today`, `added_week`, `storage_mb`, …), `GET /statistics`, `GET /changes` (a stamp that moves when anything changes), `GET /trash`, `DELETE /trash`, `GET /export?no_archive=1` (zip), `POST /import` (multipart zip: ours or a Paperless export), `POST /import/paperless {url, token}` and `…/test`, `POST /reindex`, `POST /retrain`, `GET/PUT /settings`, `GET /settings/system`, `GET /users`…, `GET /tokens`…, `GET /backup` (admin), `GET /healthz`, `GET /metrics`.
 
+Pocket Move can copy your documents out and bring documents in (`GET /pocket/portable`, link scopes `move:export` / `move:import`); importing the same zip twice adds nothing.
+
 ## Search syntax
 
 `invoice ikea` both words (prefixes match) · `"amount due"` phrase · `-draft` without · `tag:x` `#x` `-tag:x` · `from:x` `type:x` `path:x` (`none` for unset) · `created:2024` `created:2024-05` `created:2023..2024` `created:>2024-01-01` `created:30d` `created:month` · `added:…` · `asn:12` `asn:10..20` · `is:inbox` `is:untagged` `is:favorite` `is:failed` `is:pdf` `is:image` · `has:notes` `has:asn` · `field:name=value` · `title:x`.

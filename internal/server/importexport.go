@@ -252,11 +252,31 @@ func (s *Server) importZip(ctx context.Context, uid int64, path, actor string) (
 			fieldMap[f.ID] = nf.ID
 		}
 	}
+	// views and rules already here by name are left alone, so a second run adds nothing
+	haveView, haveRule := map[string]bool{}, map[string]bool{}
+	if vs, err := s.store.ListSavedViews(ctx, uid); err == nil {
+		for _, v := range vs {
+			haveView[strings.ToLower(v.Name)] = true
+		}
+	}
+	if rs, err := s.store.ListRules(ctx, uid); err == nil {
+		for _, rl := range rs {
+			haveRule[strings.ToLower(rl.Name)] = true
+		}
+	}
 	for _, v := range m.SavedViews {
+		if haveView[strings.ToLower(v.Name)] {
+			continue
+		}
+		haveView[strings.ToLower(v.Name)] = true
 		nv := store.SavedView{UserID: uid, Name: v.Name, Query: v.Query, OnDashboard: v.OnDashboard, InSidebar: v.InSidebar, Position: v.Position}
 		_ = s.store.CreateSavedView(ctx, &nv)
 	}
 	for _, rl := range m.Rules {
+		if haveRule[strings.ToLower(rl.Name)] {
+			continue
+		}
+		haveRule[strings.ToLower(rl.Name)] = true
 		nr := store.Rule{UserID: uid, Name: rl.Name, Enabled: rl.Enabled, Trigger: rl.Trigger, Position: rl.Position, Filters: rl.Filters, Actions: rl.Actions}
 		nr.Actions.AddTags = mapIDs(nr.Actions.AddTags, tagMap)
 		nr.Actions.RemoveTags = mapIDs(nr.Actions.RemoveTags, tagMap)

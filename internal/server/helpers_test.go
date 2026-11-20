@@ -26,12 +26,15 @@ type harness struct {
 	dir string
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t *testing.T, tweaks ...func(*config.Config)) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := &config.Config{AuthMode: "local", SessionTTL: time.Hour, DataDir: dir, DBPath: dir + "/t.db",
 		OriginalsDir: dir + "/originals", ArchiveDir: dir + "/archive", ThumbsDir: dir + "/thumbs", PagesDir: dir + "/pages", ConsumeDir: dir + "/consume", MirrorDir: dir + "/mirror", TmpDir: dir + "/tmp",
 		MaxUploadBytes: 50 << 20, OCRWorkers: 1, OCRThreads: 1, OCRTimeout: time.Minute, OCRLanguage: "eng", OCRMode: "skip", OCROutputType: "pdfa", ConsumePoll: time.Hour, ConsumeDelete: true, FolderRoots: []string{dir + "/mirror"}, FolderPoll: time.Hour}
+	for _, tw := range tweaks {
+		tw(cfg)
+	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	st, err := store.Open(cfg.DBPath, log)
 	if err != nil {

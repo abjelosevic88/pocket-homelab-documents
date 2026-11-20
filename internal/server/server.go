@@ -195,6 +195,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "DOCUMENTS",
 		Publishes: []string{"documents.added", "documents.processed", "documents.updated", "documents.deleted", "documents.failed", "documents.shared"},
 		Offers:    linkOffers,
+		Portable:  portable,
 		Uses:      linkUses,
 		Services:  serviceUses,
 	}
@@ -422,6 +423,7 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/trash", s.handleEmptyTrash)
 
 			r.Get("/export", s.handleExport)
+			r.Get(strings.TrimPrefix(core.PortablePath, "/api/v1"), portable.Handler())
 			r.Post("/import", s.handleImport)
 			r.Post("/import/paperless", s.handleImportPaperless)
 			r.Post("/import/paperless/test", s.handleTestPaperless)
