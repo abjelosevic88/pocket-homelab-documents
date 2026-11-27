@@ -923,6 +923,15 @@ func (s *Store) ListDocuments(ctx context.Context, f DocFilter) ([]Document, int
 	return docs, total, facets, nil
 }
 
+// CountDocuments counts the documents of a filter without listing them: the
+// total ListDocuments gives, for a caller that needs only the number.
+func (s *Store) CountDocuments(ctx context.Context, f DocFilter) (int, error) {
+	where, args, join, jargs := f.where()
+	var n int
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM documents d `+join+` WHERE `+where, append(append([]any{}, jargs...), args...)...).Scan(&n)
+	return n, err
+}
+
 func (s *Store) listOnce(ctx context.Context, f DocFilter, trigram bool) ([]Document, int, error) {
 	where, args, join, jargs := f.where()
 	rankExpr, snippetExpr := "0", "''"

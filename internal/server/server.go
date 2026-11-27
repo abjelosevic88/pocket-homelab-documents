@@ -193,11 +193,13 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Description: "Scans and files made searchable: OCR into PDF/A, full-text search with filters, tags, correspondents, types, custom fields, rules and a classifier that learns how you file. A Paperless-ngx replacement.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "DOCUMENTS",
-		Publishes: []string{"documents.added", "documents.processed", "documents.updated", "documents.deleted", "documents.failed", "documents.shared"},
-		Offers:    linkOffers,
-		Portable:  portable,
-		Uses:      linkUses,
-		Services:  serviceUses,
+		Category:     "Files",
+		Publishes:    []string{"documents.added", "documents.processed", "documents.updated", "documents.deleted", "documents.failed", "documents.shared"},
+		Offers:       linkOffers,
+		Portable:     portable,
+		Capabilities: capabilities,
+		Uses:         linkUses,
+		Services:     serviceUses,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.oidcCallbackURL()}}
@@ -335,6 +337,10 @@ func (s *Server) Router() http.Handler {
 			r.Get("/dashboard", s.handleDashboard)
 			r.Get("/statistics", s.handleStatistics)
 			r.Get("/changes", s.handleChanges)
+			// what Pocket Search, Pocket Day and Pocket Hub ask (capabilities.go)
+			r.Get("/pocket/search", core.SearchHandler(s.pocketSearch))
+			r.Get("/pocket/day/{date}", core.DayHandler(s.pocketDay))
+			r.Get("/pocket/widget", core.WidgetHandler(s.pocketWidget))
 
 			r.Get("/documents", s.handleListDocuments)
 			r.Post("/documents", s.handleUpload)

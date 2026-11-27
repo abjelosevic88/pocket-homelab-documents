@@ -68,6 +68,18 @@ Matching algorithms: `0` none, `1` any word, `2` all words, `3` exact phrase, `4
 
 Pocket Move can copy your documents out and bring documents in (`GET /pocket/portable`, link scopes `move:export` / `move:import`); importing the same zip twice adds nothing.
 
+## For Pocket Search, Pocket Day and Pocket Hub
+
+Three routes answer in the shape every Pocket app uses (Pocket Core, `docs/capabilities.md`). They read only your own documents and change nothing. You can call them with your own session or token; another Pocket app reaches each one only with its own link scope, which opens that route and nothing else (`documents:read` does not open them).
+
+| | | |
+| --- | --- | --- |
+| `GET /pocket/search?q=&limit=` | `pocket:search` | `{items: [{id, title, snippet, kind: "document", date, url, score}]}`: the search box of the Documents page, best match first; the search syntax below works. `snippet` is the text around the words found, else correspondent · type · how the text starts; `date` is the document's own date |
+| `GET /pocket/day/{YYYY-MM-DD}?tz=` | `pocket:day` | `{date, summary, items: [{id, time, title, sub, kind: "added"\|"dated", url}]}`: the documents added that day (with the time they came in) and the ones dated that day; a document that is both shows once, as added. Documents brought over from Paperless or from an export do not count as added. The day follows `tz` when given, else the server's time zone |
+| `GET /pocket/widget` | `pocket:widget` | `{line, metrics, items: [{id, title, detail, url}], url}`: what could not be read and what waits in the inbox first, then the latest documents (8 rows at most); `line` like "3 in the inbox", empty when nothing waits; `metrics` Inbox, Untagged, Added this week, Documents |
+
+There is no `POST /pocket/capture`: a document is a file, not a line of text.
+
 ## Search syntax
 
 `invoice ikea` both words (prefixes match) · `"amount due"` phrase · `-draft` without · `tag:x` `#x` `-tag:x` · `from:x` `type:x` `path:x` (`none` for unset) · `created:2024` `created:2024-05` `created:2023..2024` `created:>2024-01-01` `created:30d` `created:month` · `added:…` · `asn:12` `asn:10..20` · `is:inbox` `is:untagged` `is:favorite` `is:failed` `is:pdf` `is:image` · `has:notes` `has:asn` · `field:name=value` · `title:x`.

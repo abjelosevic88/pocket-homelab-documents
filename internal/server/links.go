@@ -48,6 +48,16 @@ var portable = &core.Portable{
 	},
 }
 
+// capabilities is what Pocket Search, Pocket Day and Pocket Hub may ask
+// Documents (docs/capabilities.md in pocket-homelab-core): one route each,
+// answered in capabilities.go. Register adds the pocket:* offers. There is no
+// quick capture: a document is a file, not a line of text.
+var capabilities = core.Capabilities{
+	Search: &core.Searchable{What: "Your documents, by title, the text read from them, correspondent, type, tags and notes", Kinds: []string{"document"}, Bangs: []string{"docs", "documents"}},
+	Day:    &core.DayFeed{Label: "Documents", One: "document", Many: "documents", Unit: "count", What: "The documents you added that day and the ones dated that day"},
+	Widget: &core.Widget{Title: "Documents", What: "What waits in your inbox or could not be read, then the documents you added last"},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -71,7 +81,7 @@ var linkRoutes = []linkRoute{
 var errLinkScope = errors.New("outside the link's scope")
 
 func linkAllows(scopes []string, r *http.Request) bool {
-	if portable.LinkAllows(scopes, r) {
+	if portable.LinkAllows(scopes, r) || capabilities.LinkAllows(scopes, r) {
 		return true
 	}
 	for _, lr := range linkRoutes {
